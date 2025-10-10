@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python:*)",
+      "Bash(venvScriptsactivate:*)",
+      "Bash(call:*)",
+      "Bash(source:*)",
+      "Bash(venv/Scripts/python.exe:*)",
+      "Bash(pip install:*)",
+      "Bash(findstr:*)",
+      "Bash(playwright:*)",
+      "WebFetch(domain:docs.browser-use.com)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}
