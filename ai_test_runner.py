@@ -20,6 +20,7 @@ from result_analyzer import LLMResultAnalyzer
 from report_generator import TestReportGenerator
 from test_types import TestExecution, TestCase
 
+
 class AITestRunner:
     """AI测试运行器 - 主要的测试工具类"""
 
@@ -48,23 +49,11 @@ class AITestRunner:
         if not api_key:
             raise ValueError("未找到API_KEY环境变量，请检查配置文件")
 
-        return ChatOpenAI(
-            model=model,
-            api_key=api_key,
-            base_url=base_url
-        )
+        return ChatOpenAI(model=model, api_key=api_key, base_url=base_url)
 
-    async def run_tests_from_file(self, test_file: str,
-                                 suite_name: Optional[str] = None,
-                                 generate_sample: bool = False) -> List[TestExecution]:
+    async def run_tests_from_file(self, test_file: str, suite_name: Optional[str] = None) -> List[TestExecution]:
         """从文件运行测试"""
         print(f"📁 开始解析测试文件: {test_file}")
-
-        # 生成示例文件（如果需要）
-        if generate_sample:
-            print("📝 生成示例测试文件...")
-            self.parser.generate_sample_test_file(test_file)
-            return []
 
         # 解析测试需求
         try:
@@ -135,16 +124,14 @@ class AITestRunner:
         urls = re.findall(url_pattern, test_description)
         url = urls[0] if urls else ""
 
-        temp_parsed = ParsedTestCase(
-            title="临时测试用例",
-            description=test_description,
-            raw_content=test_description,
-            sections={"description": test_description},
-            metadata={
-                "case_id": f"temp_{int(datetime.now().timestamp())}",
-                "url": url
-            }
-        )
+        temp_parsed = ParsedTestCase(title="临时测试用例",
+                                     description=test_description,
+                                     raw_content=test_description,
+                                     sections={"description": test_description},
+                                     metadata={
+                                         "case_id": f"temp_{int(datetime.now().timestamp())}",
+                                         "url": url
+                                     })
 
         # 分析测试用例
         test_case = await self.analyzer.analyze_test_case(temp_parsed)
@@ -163,8 +150,7 @@ class AITestRunner:
 
         return execution
 
-    async def generate_reports(self, executions: List[TestExecution],
-                             suite_name: str = "Test Suite") -> dict:
+    async def generate_reports(self, executions: List[TestExecution], suite_name: str = "Test Suite") -> dict:
         """生成测试报告"""
         print("📋 生成测试报告...")
 
@@ -174,19 +160,29 @@ class AITestRunner:
 
         try:
             # 生成所有格式的报告
-            report_paths = await self.report_generator.generate_all_formats(
-                executions, suite_name
-            )
+            report_paths = await self.report_generator.generate_all_formats(executions, suite_name)
 
             print("✅ 测试报告生成完成:")
             for format_type, path in report_paths.items():
                 print(f"  {format_type.upper()}: {path}")
 
             # 生成套件分析
-            suite_analysis = await self.result_analyzer.analyze_test_suite_results(executions)
-            print(f"📈 测试套件分析:")
-            print(f"  通过率: {suite_analysis['summary']['pass_rate']:.1f}%")
-            print(f"  总耗时: {suite_analysis['execution_time']['total']:.2f}秒")
+            try:
+                suite_analysis = await self.result_analyzer.analyze_test_suite_results(executions)
+                print(f"📈 测试套件分析:")
+                print(f"  通过率: {suite_analysis['summary']['pass_rate']:.1f}%")
+                print(f"  总耗时: {suite_analysis['execution_time']['total']:.2f}秒")
+            except Exception as e:
+                print(f"⚠️ 套件分析失败: {e}")
+                # 提供默认分析
+                total = len(executions)
+                passed = sum(1 for e in executions if e.result.value == "passed")
+                failed = sum(1 for e in executions if e.result.value == "failed")
+                error = sum(1 for e in executions if e.result.value == "error")
+                total_time = sum(e.total_execution_time or 0 for e in executions)
+                print(f"📈 测试套件分析:")
+                print(f"  通过率: {(passed/total*100):.1f}%" if total > 0 else "  通过率: 0%")
+                print(f"  总耗时: {total_time:.2f}秒")
 
             return report_paths
 
@@ -194,16 +190,14 @@ class AITestRunner:
             print(f"❌ 生成报告失败: {e}")
             return {}
 
+
 def main():
     """主函数"""
     parser = argparse.ArgumentParser(description="AI驱动的Web测试工具")
     parser.add_argument("--file", "-f", help="测试需求文件路径（Markdown格式）")
     parser.add_argument("--test", "-t", help="单个测试描述")
     parser.add_argument("--suite", "-s", help="测试套件名称")
-    parser.add_argument("--generate-sample", "-g", action="store_true",
-                       help="生成示例测试文件")
-    parser.add_argument("--no-report", action="store_true",
-                       help="不生成测试报告")
+    parser.add_argument("--no-report", action="store_true", help="不生成测试报告")
 
     args = parser.parse_args()
 
@@ -212,18 +206,9 @@ def main():
         executions = []
 
         try:
-            if args.generate_sample and args.file:
-                # 生成示例文件
-                await test_runner.run_tests_from_file(
-                    args.file, generate_sample=True
-                )
-                return
-
-            elif args.file:
+            if args.file:
                 # 从文件运行测试
-                executions = await test_runner.run_tests_from_file(
-                    args.file, args.suite
-                )
+                executions = await test_runner.run_tests_from_file(args.file, args.suite)
 
             elif args.test:
                 # 运行单个测试
@@ -263,6 +248,7 @@ def main():
 
     # 运行主程序
     asyncio.run(run())
+
 
 if __name__ == "__main__":
     main()

@@ -7,12 +7,59 @@ from typing import List, Dict, Any, Optional, Tuple
 from datetime import datetime
 from browser_use.llm import ChatOpenAI
 from test_types import TestExecution, TestResult, TestCase, TestStep, Assertion
+from zhipuai import ZhipuAI
+
 
 class LLMResultAnalyzer:
     """LLM结果分析器"""
 
     def __init__(self, llm: ChatOpenAI):
-        self.llm = llm
+        self.llm = llm  # browser-use 用的 LLM（保持不变）
+        # 初始化智谱AI官方SDK用于分析工作
+        self.zhipu_client = None
+        try:
+            import os
+            from dotenv import load_dotenv
+            load_dotenv()
+
+            api_key = os.getenv("API_KEY")
+            if api_key:
+                self.zhipu_client = ZhipuAI(api_key=api_key)
+        except Exception as e:
+            print(f"⚠️ 智谱AI SDK 初始化失败，将使用 browser-use LLM: {e}")
+
+    async def _call_llm(self, prompt: str) -> str:
+        """调用LLM，优先使用智谱AI SDK，失败时回退到 browser-use LLM"""
+        if self.zhipu_client:
+            try:
+                response = self.zhipu_client.chat.completions.create(
+                    model="glm-4.5",
+                    messages=[{
+                        "role": "user",
+                        "content": prompt
+                    }],
+                    temperature=0.1,
+                )
+                return response.choices[0].message.content
+            except Exception as e:
+                print(f"⚠️ 智谱AI API 调用失败，回退到 browser-use LLM: {e}")
+                # 回退到browser-use LLM
+                response = self.llm(prompt)
+                if hasattr(response, 'content'):
+                    return response.content
+                elif isinstance(response, str):
+                    return response
+                else:
+                    return str(response)
+        else:
+            # 直接使用 browser-use LLM
+            response = self.llm(prompt)
+            if hasattr(response, 'content'):
+                return response.content
+            elif isinstance(response, str):
+                return response
+            else:
+                return str(response)
 
     async def analyze_execution_result(self, execution: TestExecution) -> TestResult:
         """分析测试执行结果"""
@@ -69,13 +116,9 @@ class LLMResultAnalyzer:
 """
 
         try:
-            response = await self.llm.ainvoke(prompt)
-            if hasattr(response, 'content'):
-                result_text = response.content.strip()
-            elif isinstance(response, str):
-                result_text = response.strip()
-            else:
-                result_text = str(response).strip()
+            # 使用新的LLM调用方法
+            result_text = await self._call_llm(prompt)
+            result_text = result_text.strip()
 
             # 清理markdown标记
             if result_text.startswith('```json'):
@@ -127,15 +170,12 @@ class LLMResultAnalyzer:
         total_steps = len(test_case.steps)
         passed_steps = sum(1 for step in test_case.steps if step.result == TestResult.PASSED)
         total_assertions = sum(len(step.assertions) for step in test_case.steps)
-        passed_assertions = sum(
-            1 for step in test_case.steps
-            for assertion in step.assertions
-            if assertion.passed
-        )
+        passed_assertions = sum(1 for step in test_case.steps for assertion in step.assertions if assertion.passed)
 
         context_parts.append(f"\n执行统计：")
         context_parts.append(f"- 步骤通过率: {passed_steps}/{total_steps} ({passed_steps/total_steps*100:.1f}%)" if total_steps > 0 else "- 步骤通过率: 0/0 (0%)")
-        context_parts.append(f"- 断言通过率: {passed_assertions}/{total_assertions} ({passed_assertions/total_assertions*100:.1f}%)" if total_assertions > 0 else "- 断言通过率: 0/0 (0%)")
+        context_parts.append(f"- 断言通过率: {passed_assertions}/{total_assertions} ({passed_assertions/total_assertions*100:.1f}%)" if total_assertions >
+                             0 else "- 断言通过率: 0/0 (0%)")
         context_parts.append(f"- 执行时间: {execution.total_execution_time:.2f}秒")
 
         # 添加浏览器日志（如果有）
@@ -151,10 +191,7 @@ class LLMResultAnalyzer:
         if not execution.error_details:
             execution.error_details = {}
 
-        execution.error_details.update({
-            "llm_analysis": analysis,
-            "analysis_timestamp": datetime.now().isoformat()
-        })
+        execution.error_details.update({"llm_analysis": analysis, "analysis_timestamp": datetime.now().isoformat()})
 
     async def analyze_test_suite_results(self, executions: List[TestExecution]) -> Dict[str, Any]:
         """分析整个测试套件的结果"""
@@ -169,12 +206,7 @@ class LLMResultAnalyzer:
         for execution in executions:
             test_type = execution.test_case.test_type.value
             if test_type not in type_analysis:
-                type_analysis[test_type] = {
-                    "total": 0,
-                    "passed": 0,
-                    "failed": 0,
-                    "error": 0
-                }
+                type_analysis[test_type] = {"total": 0, "passed": 0, "failed": 0, "error": 0}
 
             type_analysis[test_type]["total"] += 1
             if execution.result == TestResult.PASSED:
@@ -254,8 +286,9 @@ class LLMResultAnalyzer:
 """
 
             try:
-                response = await self.llm.ainvoke(prompt)
-                result_text = response.content.strip()
+                # 使用新的LLM调用方法
+                result_text = await self._call_llm(prompt)
+                result_text = result_text.strip()
 
                 if result_text.startswith('```json'):
                     result_text = result_text[7:]
@@ -304,13 +337,9 @@ class LLMResultAnalyzer:
 """
 
         try:
-            response = await self.llm.ainvoke(prompt)
-            if hasattr(response, 'content'):
-                result_text = response.content.strip()
-            elif isinstance(response, str):
-                result_text = response.strip()
-            else:
-                result_text = str(response).strip()
+            # 使用新的LLM调用方法
+            result_text = await self._call_llm(prompt)
+            result_text = result_text.strip()
 
             if result_text.startswith('```json'):
                 result_text = result_text[7:]
@@ -345,13 +374,9 @@ class LLMResultAnalyzer:
 """
 
         try:
-            response = await self.llm.ainvoke(prompt)
-            if hasattr(response, 'content'):
-                return response.content.strip()
-            elif isinstance(response, str):
-                return response.strip()
-            else:
-                return str(response).strip()
+            # 使用新的LLM调用方法
+            result_text = await self._call_llm(prompt)
+            return result_text.strip()
         except Exception as e:
             print(f"生成测试摘要时出错: {e}")
             return f"测试用例 '{test_case.title}' 执行{execution.result.value}，耗时{execution.total_execution_time:.2f}秒。"

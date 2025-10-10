@@ -9,6 +9,7 @@ from datetime import datetime
 from dataclasses import dataclass
 from test_types import TestCase, TestStep, Assertion, TestType, AssertionType
 
+
 @dataclass
 class ParsedTestCase:
     """解析后的测试用例（尚未通过LLM分析）"""
@@ -17,6 +18,7 @@ class ParsedTestCase:
     raw_content: str
     sections: Dict[str, str]
     metadata: Dict[str, Any]
+
 
 class TestRequirementParser:
     """测试需求解析器"""
@@ -100,7 +102,12 @@ class TestRequirementParser:
 
                 # 开始新的section
                 current_section = section_match['type']
-                current_content = [section_match['content']]
+
+                # 特殊处理：如果section标题后直接有内容，将内容作为第一行
+                if section_match['content']:
+                    current_content = [section_match['content']]
+                else:
+                    current_content = []
 
                 # 提取元数据
                 if section_match['type'] in ['priority', 'tags', 'url']:
@@ -127,23 +134,33 @@ class TestRequirementParser:
         if not title and not description:
             return None
 
-        return ParsedTestCase(
-            title=title,
-            description=description,
-            raw_content=content,
-            sections=sections,
-            metadata=metadata
-        )
+        return ParsedTestCase(title=title, description=description, raw_content=content, sections=sections, metadata=metadata)
 
     def _match_section(self, line: str) -> Optional[Dict[str, str]]:
         """匹配section标题"""
+        # 先尝试匹配带冒号的格式
+        colon_patterns = {
+            'title': r'^(?:#|测试标题|Title)[:：]\s*(.+)$',
+            'description': r'^(?:##|测试描述|Description)[:：]\s*(.+)$',
+            'url': r'^(?:###|测试网址|URL)[:：]\s*(.+)$',
+            'preconditions': r'^(?:###|前置条件|Preconditions)[:：]\s*(.+)$',
+            'steps': r'^(?:###|测试步骤|Steps|Test Steps)[:：]\s*(.+)$',
+            'expected': r'^(?:###|期望结果|Expected Results|Expected)[:：]\s*(.+)$',
+            'priority': r'^(?:###|优先级|Priority)[:：]\s*(.+)$',
+            'tags': r'^(?:###|标签|Tags)[:：]\s*(.+)$',
+        }
+
+        # 检查冒号格式
+        for section_type, pattern in colon_patterns.items():
+            match = re.match(pattern, line, re.IGNORECASE)
+            if match:
+                return {'type': section_type, 'content': match.group(1).strip()}
+
+        # 再尝试原始格式
         for section_type, pattern in self.section_patterns.items():
             match = re.match(pattern, line, re.IGNORECASE)
             if match:
-                return {
-                    'type': section_type,
-                    'content': match.group(1).strip()
-                }
+                return {'type': section_type, 'content': match.group(1).strip()}
         return None
 
     def extract_test_steps(self, steps_text: str) -> List[str]:
@@ -154,10 +171,10 @@ class TestRequirementParser:
         steps = []
         # 支持多种步骤格式
         step_patterns = [
-            r'^\d+\.\s*(.+)',      # 1. 步骤描述
-            r'^-\s*(.+)',          # - 步骤描述
-            r'^\*\s*(.+)',         # * 步骤描述
-            r'^\•\s*(.+)',         # • 步骤描述
+            r'^\d+\.\s*(.+)',  # 1. 步骤描述
+            r'^-\s*(.+)',  # - 步骤描述
+            r'^\*\s*(.+)',  # * 步骤描述
+            r'^\•\s*(.+)',  # • 步骤描述
         ]
 
         for line in steps_text.split('\n'):
@@ -187,82 +204,10 @@ class TestRequirementParser:
 
         return results
 
-    def generate_sample_test_file(self, file_path: str):
-        """生成示例测试文件"""
-        sample_content = """# 测试用例示例
-
-## 测试标题：验证客服中心QQ显示正确
-
-### 测试描述：
-访问久游网官网，进入客服中心页面，验证客服QQ号码显示正确
-
-### 测试网址：
-https://xxxxx.com/
-
-### 前置条件：
-1. 网络连接正常
-2. 久游网网站可正常访问
-
-### 测试步骤：
-1. 访问 https://xxxxxx.com/
-2. 点击"客服中心"链接
-3. 在新打开的客服中心页面中查找QQ号码
-
-### 期望结果：
-1. 能够成功访问久游网首页
-2. 能够成功打开客服中心页面
-3. 客服中心页面显示QQ号码：555555
-
-### 优先级：
-high
-
-### 标签：
-功能测试, 客服, 验证
-
----
-
-## 测试标题：充值中心页面导航测试
-
-### 测试描述：
-测试从官网导航到充值中心的功能
-
-### 测试网址：
-https://xxxxx.com/
-
-### 前置条件：
-1. 网站正常运行
-2. 用户已登录（如需要）
-
-### 测试步骤：
-1. 访问 https://xxxxx.com/
-2. 在首页寻找充值相关链接
-3. 点击进入充值中心
-4. 验证页面加载成功
-
-### 期望结果：
-1. 首页正常加载
-2. 能够找到充值相关链接
-3. 点击后成功跳转到充值页面
-4. 充值页面标题和URL正确
-
-### 优先级：
-medium
-
-### 标签：
-导航测试, 充值, 用户体验
-"""
-
-        with open(file_path, 'w', encoding='utf-8') as f:
-            f.write(sample_content)
-
-        print(f"示例测试文件已生成: {file_path}")
 
 # 使用示例
 if __name__ == "__main__":
     parser = TestRequirementParser()
-
-    # 生成示例文件
-    parser.generate_sample_test_file("sample_tests.md")
 
     # 解析测试文件
     try:
@@ -277,4 +222,4 @@ if __name__ == "__main__":
             print(f"sections: {list(case.sections.keys())}")
 
     except FileNotFoundError:
-        print("测试文件不存在，请先运行示例生成")
+        print("测试文件不存在")

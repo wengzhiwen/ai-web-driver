@@ -10,12 +10,57 @@ from test_types import (
 )
 from test_parser import ParsedTestCase
 from browser_use.llm import ChatOpenAI
+from zhipuai import ZhipuAI
 
 class LLMTestAnalyzer:
     """LLM测试分析器"""
 
     def __init__(self, llm: ChatOpenAI):
-        self.llm = llm
+        self.llm = llm  # browser-use 用的 LLM（保持不变）
+        # 初始化智谱AI官方SDK用于分析工作
+        self.zhipu_client = None
+        try:
+            import os
+            from dotenv import load_dotenv
+            load_dotenv()
+
+            api_key = os.getenv("API_KEY")
+            if api_key:
+                self.zhipu_client = ZhipuAI(api_key=api_key)
+        except Exception as e:
+            print(f"⚠️ 智谱AI SDK 初始化失败，将使用 browser-use LLM: {e}")
+
+    async def _call_llm(self, prompt: str) -> str:
+        """调用LLM，优先使用智谱AI SDK，失败时回退到 browser-use LLM"""
+        if self.zhipu_client:
+            try:
+                response = self.zhipu_client.chat.completions.create(
+                    model="glm-4.5",
+                    messages=[
+                        {"role": "user", "content": prompt}
+                    ],
+                    temperature=0.1,
+                )
+                return response.choices[0].message.content
+            except Exception as e:
+                print(f"⚠️ 智谱AI API 调用失败，回退到 browser-use LLM: {e}")
+                # 回退到browser-use LLM
+                response = self.llm(prompt)
+                if hasattr(response, 'content'):
+                    return response.content
+                elif isinstance(response, str):
+                    return response
+                else:
+                    return str(response)
+        else:
+            # 直接使用 browser-use LLM
+            response = self.llm(prompt)
+            if hasattr(response, 'content'):
+                return response.content
+            elif isinstance(response, str):
+                return response
+            else:
+                return str(response)
 
     async def analyze_test_case(self, parsed_case: ParsedTestCase) -> TestCase:
         """分析测试用例，转换为结构化测试用例"""
@@ -26,7 +71,7 @@ class LLMTestAnalyzer:
         test_steps = await self._extract_test_steps(parsed_case)
 
         # 3. 生成断言
-        assertions = await self._generate_assertions(parsed_case, test_steps)
+        await self._generate_assertions(parsed_case, test_steps)
 
         # 4. 设置元数据
         priority = parsed_case.metadata.get('priority', 'medium')
@@ -75,14 +120,9 @@ class LLMTestAnalyzer:
 """
 
         try:
-            response = await self.llm.ainvoke(prompt)
-            # 处理不同类型的响应
-            if hasattr(response, 'content'):
-                result = response.content.strip().lower()
-            elif isinstance(response, str):
-                result = response.strip().lower()
-            else:
-                result = str(response).strip().lower()
+            # 使用新的LLM调用方法
+            result_text = await self._call_llm(prompt)
+            result = result_text.strip().lower()
 
             # 映射可能的回答到标准类型
             type_mapping = {
@@ -112,12 +152,28 @@ class LLMTestAnalyzer:
 
     async def _extract_test_steps(self, parsed_case: ParsedTestCase) -> List[TestStep]:
         """提取测试步骤"""
-        steps_text = parsed_case.sections.get('steps', '')
-        expected_text = parsed_case.sections.get('expected', '')
+        # 尝试多种可能的section key
+        steps_text = (
+            parsed_case.sections.get('steps', '') or
+            parsed_case.sections.get('test_steps', '') or
+            parsed_case.sections.get('test steps', '') or
+            parsed_case.sections.get('测试步骤', '')
+        )
+
+        expected_text = (
+            parsed_case.sections.get('expected', '') or
+            parsed_case.sections.get('expected_results', '') or
+            parsed_case.sections.get('expected results', '') or
+            parsed_case.sections.get('期望结果', '')
+        )
 
         if not steps_text:
             # 如果没有明确的步骤，从描述中生成
+            print(f"未找到测试步骤，尝试从描述生成: {parsed_case.title}")
+            print(f"可用的 sections: {list(parsed_case.sections.keys())}")
             steps_text = await self._generate_steps_from_description(parsed_case)
+        else:
+            print(f"成功解析到测试步骤: {len(steps_text.split(chr(10)))} 个步骤")
 
         # 解析步骤
         step_descriptions = self._parse_steps_text(steps_text)
@@ -157,18 +213,32 @@ class LLMTestAnalyzer:
 """
 
         try:
-            response = await self.llm.ainvoke(prompt)
-            if hasattr(response, 'content'):
-                return response.content.strip()
-            elif isinstance(response, str):
-                return response.strip()
-            else:
-                return str(response).strip()
+            # 使用新的LLM调用方法
+            return await self._call_llm(prompt)
         except Exception as e:
             print(f"生成测试步骤时出错: {e}")
-            return "1. 执行测试"
+            # 根据测试描述生成基础步骤，包含具体URL
+            title = parsed_case.title.lower()
+            description = parsed_case.description.lower()
+            url = parsed_case.metadata.get('url', '')
 
-    async def _generate_assertions(self, parsed_case: ParsedTestCase, test_steps: List[TestStep]) -> List[Assertion]:
+            if '客服' in title or 'qq' in description:
+                if url:
+                    return f"1. 访问 {url}\n2. 点击客服中心链接\n3. 查找并验证客服QQ号码"
+                else:
+                    return "1. 访问 https://www.9you.com/\n2. 点击客服中心链接\n3. 查找并验证客服QQ号码"
+            elif '充值' in title or '充值' in description:
+                if url:
+                    return f"1. 访问 {url}\n2. 查找充值相关链接\n3. 进入充值中心页面"
+                else:
+                    return "1. 访问 https://www.9you.com/\n2. 查找充值相关链接\n3. 进入充值中心页面"
+            else:
+                if url:
+                    return f"1. 访问 {url}\n2. 执行主要操作\n3. 验证结果"
+                else:
+                    return "1. 访问 https://www.9you.com/\n2. 执行主要操作\n3. 验证结果"
+
+    async def _generate_assertions(self, parsed_case: ParsedTestCase, test_steps: List[TestStep]) -> None:
         """生成断言"""
         prompt = f"""
 请分析以下测试需求，为每个测试步骤生成相应的断言。
@@ -210,14 +280,8 @@ class LLMTestAnalyzer:
 """
 
         try:
-            response = await self.llm.ainvoke(prompt)
-            # 尝试解析JSON
-            if hasattr(response, 'content'):
-                result_text = response.content.strip()
-            elif isinstance(response, str):
-                result_text = response.strip()
-            else:
-                result_text = str(response).strip()
+            # 使用新的LLM调用方法
+            result_text = await self._call_llm(prompt)
 
             # 清理可能的markdown标记
             if result_text.startswith('```json'):
@@ -226,7 +290,6 @@ class LLMTestAnalyzer:
                 result_text = result_text[:-3]
 
             data = json.loads(result_text)
-            assertions = []
 
             for i, step in enumerate(test_steps):
                 step_assertions = []
@@ -246,14 +309,11 @@ class LLMTestAnalyzer:
                         step_assertions.append(default_assertion)
 
                 step.assertions = step_assertions
-                assertions.extend(step_assertions)
-
-            return assertions
 
         except Exception as e:
             print(f"生成断言时出错: {e}")
             # 生成默认断言
-            return self._generate_default_assertions(test_steps)
+            self._generate_default_assertions(test_steps)
 
     def _create_assertion_from_dict(self, assert_info: Dict[str, Any]) -> Optional[Assertion]:
         """从字典创建断言对象"""
@@ -311,16 +371,13 @@ class LLMTestAnalyzer:
                 expected=expected_result
             )
 
-    def _generate_default_assertions(self, test_steps: List[TestStep]) -> List[Assertion]:
+    def _generate_default_assertions(self, test_steps: List[TestStep]) -> None:
         """为所有步骤生成默认断言"""
-        assertions = []
         for step in test_steps:
             if step.expected_result:
                 assertion = self._generate_default_assertion(step.expected_result)
                 if assertion:
                     step.assertions.append(assertion)
-                    assertions.append(assertion)
-        return assertions
 
     def _parse_steps_text(self, steps_text: str) -> List[str]:
         """解析步骤文本"""
