@@ -208,3 +208,7 @@ __marimo__/
 
 # local settings
 start-claude.bat
+
+# local data
+sample_tests.md
+test_reports/*
