@@ -10,7 +10,7 @@
 ## 3. 前置条件与假设
 - 运行环境已安装 Playwright Python 版及浏览器依赖。
 - ActionPlan DSL 由上游编译器生成并通过基础 Schema 校验。
-- SiteProfile 已确保别名定位器可用；执行器只做最小验证。
+- ActionPlan DSL 已携带可直接使用的 selector；执行器不再加载 SiteProfile。
 
 ## 4. 理想流程
 1. 读取并解析 ActionPlan JSON（支持文件路径或内存对象）。
@@ -18,7 +18,7 @@
 3. 初始化 Playwright：启动浏览器、创建 context/page。
 4. 以顺序方式调度步骤：
    - `goto`：拼接 `meta.baseUrl` 与目标 URL。
-   - `fill`/`click`：基于别名定位器操作元素。
+   - `fill`/`click`：基于步骤内提供的 selector 操作元素。
    - `assert`：支持 `visible`、`text_equals`、`attr_equals` 等基础断言。
 5. 逐步记录执行结果（成功/失败、耗时、异常信息）。
 6. 根据策略截取截图（默认失败时截取，选项支持全量）。
@@ -26,7 +26,7 @@
 
 ## 5. 组件划分
 - **RunnerEntry**：公开 `run_action_plan(plan: dict | str)`；组织整体流程。
-- **PlanValidator**：基于 JSON Schema 做字段级校验，并验证 alias/URL 的基本合法性。
+- **PlanValidator**：基于 JSON Schema 做字段级校验，并验证 selector/URL 的基本合法性。
 - **StepDispatcher**：将 DSL 步骤映射至具体 Playwright 调用，封装异常。
 - **ResultReporter**：维护运行状态、写入步骤日志、生成截图、输出报告 JSON。
 - **IOAdapter**：生成结果目录结构，例如 `results/<timestamp>/`，包含 `run.json`、`steps/<index>.png`、`runner.log`。
@@ -38,9 +38,9 @@
     "meta": {"testId": "TC-001", "baseUrl": "https://app.example"},
     "steps": [
       {"t": "goto", "url": "/login"},
-      {"t": "fill", "alias": "login.email", "value": "qa@example.com"},
-      {"t": "click", "alias": "login.submit"},
-      {"t": "assert", "kind": "visible", "alias": "home.banner"}
+      {"t": "fill", "selector": "data-test=login.email", "value": "qa@example.com"},
+      {"t": "click", "selector": "data-test=login.submit"},
+      {"t": "assert", "kind": "visible", "selector": "data-test=home.banner"}
     ]
   }
   ```
