@@ -1,0 +1,48 @@
+{
+  "meta": {
+    "testId": "RUNJP-SEARCH-TSUKUBA-001",
+    "baseUrl": "https://www.runjplib.com"
+  },
+  "steps": [
+    {
+      "t": "goto",
+      "url": "/"
+    },
+    {
+      "t": "fill",
+      "selector": "input#universitySearch",
+      "value": "筑波大学"
+    },
+    {
+      "t": "click",
+      "selector": "button#searchButton"
+    },
+    {
+      "t": "assert",
+      "kind": "visible",
+      "selector": ".sidebar .nav.flex-column"
+    },
+    {
+      "t": "assert",
+      "kind": "text_contains",
+      "selector": ".sidebar .nav.flex-column a.nav-link:has-text('筑波大学')",
+      "value": "筑波大学"
+    },
+    {
+      "t": "click",
+      "selector": ".sidebar .nav.flex-column a.nav-link:has-text('筑波大学')"
+    },
+    {
+      "t": "assert",
+      "kind": "text_contains",
+      "selector": "main h1",
+      "value": "筑波大学"
+    },
+    {
+      "t": "assert",
+      "kind": "text_contains",
+      "selector": "main h2:has-text('报名截止日期')",
+      "value": "报名截止日期"
+    }
+  ]
+}
