@@ -212,3 +212,4 @@ start-claude.bat
 # local data
 sample_tests.md
 test_reports/*
+**/.DS_Store
