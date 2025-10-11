@@ -5,9 +5,7 @@
 import re
 import os
 from typing import List, Optional, Dict, Any
-from datetime import datetime
 from dataclasses import dataclass
-from test_types import TestCase, TestStep, Assertion, TestType, AssertionType
 
 
 @dataclass
@@ -49,15 +47,15 @@ class TestRequirementParser:
         """解析Markdown内容"""
         # 按分隔符分割测试用例
         test_cases_raw = self._split_test_cases(content)
-        parsed_cases = []
+        cases = []
 
-        for i, case_content in enumerate(test_cases_raw):
+        for idx, case_content in enumerate(test_cases_raw):
             if case_content.strip():
-                parsed_case = self._parse_single_test_case(case_content, f"{source}_case_{i+1}")
+                parsed_case = self._parse_single_test_case(case_content, f"{source}_case_{idx+1}")
                 if parsed_case:
-                    parsed_cases.append(parsed_case)
+                    cases.append(parsed_case)
 
-        return parsed_cases
+        return cases
 
     def _split_test_cases(self, content: str) -> List[str]:
         """分割测试用例"""
@@ -72,12 +70,12 @@ class TestRequirementParser:
         cases = [content]
         for sep in separators:
             new_cases = []
-            for case in cases:
-                new_cases.extend(re.split(sep, case))
+            for case_item in cases:
+                new_cases.extend(re.split(sep, case_item))
             cases = new_cases
 
         # 过滤空用例
-        return [case.strip() for case in cases if case.strip()]
+        return [case_item.strip() for case_item in cases if case_item.strip()]
 
     def _parse_single_test_case(self, content: str, case_id: str) -> Optional[ParsedTestCase]:
         """解析单个测试用例"""
@@ -211,11 +209,11 @@ if __name__ == "__main__":
 
     # 解析测试文件
     try:
-        parsed_cases = parser.parse_markdown_file("sample_tests.md")
-        print(f"成功解析 {len(parsed_cases)} 个测试用例")
+        cases = parser.parse_markdown_file("sample_tests.md")
+        print(f"成功解析 {len(cases)} 个测试用例")
 
-        for i, case in enumerate(parsed_cases, 1):
-            print(f"\n--- 测试用例 {i} ---")
+        for idx, case in enumerate(cases, 1):
+            print(f"\n--- 测试用例 {idx} ---")
             print(f"标题: {case.title}")
             print(f"描述: {case.description}")
             print(f"元数据: {case.metadata}")

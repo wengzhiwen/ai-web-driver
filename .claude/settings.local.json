@@ -15,7 +15,10 @@
       "Bash(findstr:*)",
       "Bash(playwright:*)",
       "WebFetch(domain:docs.browser-use.com)",
-      "Bash(yapf:*)"
+      "Bash(yapf:*)",
+      "Bash(python3:*)",
+      "WebFetch(domain:github.com)",
+      "WebSearch"
     ],
     "deny": [],
     "ask": []

@@ -18,7 +18,7 @@ from llm_analyzer import LLMTestAnalyzer
 from test_executor import TestExecutionEngine
 from result_analyzer import LLMResultAnalyzer
 from report_generator import TestReportGenerator
-from test_types import TestExecution, TestCase
+from test_types import TestExecution
 
 
 class AITestRunner:
@@ -116,7 +116,6 @@ class AITestRunner:
 
         # 创建临时解析的测试用例
         from test_parser import ParsedTestCase
-        from test_types import TestType
         import re
 
         # 从描述中提取URL
@@ -169,7 +168,7 @@ class AITestRunner:
             # 生成套件分析
             try:
                 suite_analysis = await self.result_analyzer.analyze_test_suite_results(executions)
-                print(f"📈 测试套件分析:")
+                print("📈 测试套件分析:")
                 print(f"  通过率: {suite_analysis['summary']['pass_rate']:.1f}%")
                 print(f"  总耗时: {suite_analysis['execution_time']['total']:.2f}秒")
             except Exception as e:
@@ -177,10 +176,8 @@ class AITestRunner:
                 # 提供默认分析
                 total = len(executions)
                 passed = sum(1 for e in executions if e.result.value == "passed")
-                failed = sum(1 for e in executions if e.result.value == "failed")
-                error = sum(1 for e in executions if e.result.value == "error")
                 total_time = sum(e.total_execution_time or 0 for e in executions)
-                print(f"📈 测试套件分析:")
+                print("📈 测试套件分析:")
                 print(f"  通过率: {(passed/total*100):.1f}%" if total > 0 else "  通过率: 0%")
                 print(f"  总耗时: {total_time:.2f}秒")
 
