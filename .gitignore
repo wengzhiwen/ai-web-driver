@@ -213,3 +213,9 @@ start-claude.bat
 sample_tests.md
 test_reports/*
 **/.DS_Store
+results/*
+site_profiles/*
+action_plans/*
+!action_plans/plan1/
+!action_plans/plan1/**
+test_requests/*
