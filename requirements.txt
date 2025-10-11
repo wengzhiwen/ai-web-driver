@@ -1,7 +1,5 @@
-browser-use
 playwright
 python-dotenv
-jinja2
 
 yapf
 isort
