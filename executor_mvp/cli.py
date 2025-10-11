@@ -8,7 +8,13 @@ import sys
 from pathlib import Path
 from typing import Sequence
 
-from dotenv import load_dotenv
+try:
+    from dotenv import load_dotenv
+except ImportError:
+
+    def load_dotenv(*_args, **_kwargs):
+        return False
+
 
 from .executor import Executor, ExecutorSettings
 from .loader import load_plan_from_directory

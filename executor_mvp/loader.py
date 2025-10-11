@@ -77,9 +77,7 @@ def load_plan_from_directory(plan_dir: Any, case_name: Optional[str] = None) -> 
             raise FileNotFoundError(f"No cases found under '{cases_dir}'")
         if len(candidates) > 1:
             options = ", ".join(candidate.name for candidate in candidates)
-            raise ValueError(
-                "Multiple cases found; specify one via --case (available: " + options + ")"
-            )
+            raise ValueError("Multiple cases found; specify one via --case (available: " + options + ")")
         case_dir = candidates[0]
 
     plan_path = case_dir / "action_plan.json"
