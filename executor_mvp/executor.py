@@ -93,6 +93,9 @@ class Executor:
         status = "passed"
         error_message: Optional[str] = None
         screenshot_path: Optional[str] = None
+        current_url: Optional[str] = None
+        page_title: Optional[str] = None
+        dom_size: Optional[int] = None
 
         try:
             if step.t == "goto":
@@ -126,6 +129,7 @@ class Executor:
                     screenshot_path = None
         finally:
             step_end = datetime.utcnow()
+            current_url, page_title, dom_size = self._gather_page_context(page)
 
         return StepResult(
             index=index,
@@ -135,6 +139,9 @@ class Executor:
             finished_at=step_end,
             error=error_message,
             screenshot_path=screenshot_path,
+            current_url=current_url,
+            page_title=page_title,
+            dom_size_bytes=dom_size,
         )
 
     def _handle_goto(self, page, plan: ActionPlan, step: ActionStep) -> None:
@@ -211,6 +218,28 @@ class Executor:
         if self.settings.screenshots == "all":
             return True
         return not step_success
+
+    def _gather_page_context(self, page) -> tuple[Optional[str], Optional[str], Optional[int]]:
+        current_url: Optional[str] = None
+        page_title: Optional[str] = None
+        dom_size: Optional[int] = None
+
+        try:
+            current_url = page.url
+        except Exception as exc:  # pragma: no cover - observational guard
+            self.logger.debug("Failed to read page url: %s", exc)
+        try:
+            page_title = page.title()
+        except Exception as exc:  # pragma: no cover - observational guard
+            self.logger.debug("Failed to read page title: %s", exc)
+        try:
+            content = page.content()
+        except Exception as exc:  # pragma: no cover - observational guard
+            self.logger.debug("Failed to read page content: %s", exc)
+        else:
+            dom_size = len(content.encode("utf-8"))
+
+        return current_url, page_title, dom_size
 
     @staticmethod
     def _build_run_id(test_id: str) -> str:

@@ -37,6 +37,9 @@ class StepResult:
     finished_at: datetime
     error: Optional[str] = None
     screenshot_path: Optional[str] = None
+    current_url: Optional[str] = None
+    page_title: Optional[str] = None
+    dom_size_bytes: Optional[int] = None
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -48,6 +51,9 @@ class StepResult:
             "finished_at": self.finished_at.isoformat(),
             "error": self.error,
             "screenshot": self.screenshot_path,
+            "current_url": self.current_url,
+            "page_title": self.page_title,
+            "dom_size_bytes": self.dom_size_bytes,
         }
 
 
