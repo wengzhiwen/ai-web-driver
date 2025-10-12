@@ -65,7 +65,6 @@ class Executor:
                     result.steps.append(step_result)
                     if step_result.status == "failed":
                         result.status = "failed"
-                        result.error = step_result.error
                         break
         except Exception as exc:  # pragma: no cover - guard for unexpected errors
             self.logger.exception("Run crashed with unexpected error")
@@ -250,7 +249,7 @@ class Executor:
     @staticmethod
     def _format_error(exc: Exception) -> str:
         if isinstance(exc, PlaywrightTimeoutError):  # pragma: no cover - depends on runtime
-            return f"Timeout: {exc.message}"
+            return "验证失败：未能找到指定的DOM元素"
         return str(exc)
 
     @contextmanager

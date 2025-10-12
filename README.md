@@ -11,7 +11,16 @@
 
 ### 标定工具（Profile Builder）
 
-还没写
+CLI 自动标定草稿开发中，可针对单个 URL 生成 Site Profile 片段并合并：
+
+```bash
+python -m profile_builder_mvp.cli \
+  --url https://example.com/products \
+  --append-to site_profiles/shop.json
+```
+- 如果未指定 `--append-to` 或 `--output`，结果会写入 `site_profiles/<时间戳>/<域名-路径>.json`，避免覆盖历史草稿。
+- 执行过程中会询问页面是否为详情页，并自动将页面名称抽象为如“博客详情页”
+- 传入 `--interactive` 可在抓取后逐步裁剪长文本、采样重复结构
 
 ### 用例编译器（Compiler MVP）
 
@@ -23,6 +32,7 @@
     --profile site_profiles/plan1_site_profile.json \
     --summary
   ```
+- 结果会保存到 `action_plans/` 目录中
 
 ### 测试执行器（Executor MVP）
 
@@ -33,7 +43,8 @@
     --plan-dir action_plans/plan1 \
     --summary
   ```
+- 结果会写入到 `results/` 目录中
 
-- 报告查看器
+### 报告查看器
 
 看情况，不一定需要MVP

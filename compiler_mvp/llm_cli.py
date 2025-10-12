@@ -5,6 +5,7 @@ import argparse
 import json
 import logging
 import sys
+from datetime import datetime
 from pathlib import Path
 from typing import Sequence
 
@@ -64,6 +65,9 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     parser = build_parser()
     args = parser.parse_args(argv)
+
+    timestamp = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")
+    print(f"Compiler run at: {timestamp}")
 
     request = parse_markdown(Path(args.request))
     profile = load_site_profile(Path(args.profile))
