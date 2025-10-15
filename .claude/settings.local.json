@@ -20,7 +20,11 @@
       "Bash(yapf:*)",
       "Bash(python3:*)",
       "WebFetch(domain:github.com)",
-      "WebSearch"
+      "WebSearch",
+      "Bash(mkdir:*)",
+      "Bash(lsof:*)",
+      "Bash(kill:*)",
+      "Bash(curl:*)"
     ],
     "deny": [],
     "ask": []
