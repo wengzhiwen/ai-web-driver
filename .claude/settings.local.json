@@ -24,7 +24,8 @@
       "Bash(mkdir:*)",
       "Bash(lsof:*)",
       "Bash(kill:*)",
-      "Bash(curl:*)"
+      "Bash(curl:*)",
+      "Bash(pip show:*)"
     ],
     "deny": [],
     "ask": []
