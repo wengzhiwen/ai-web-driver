@@ -1,0 +1,33 @@
+{
+  "manifest_version": 3,
+  "name": "标定工具 - Chrome插件版",
+  "version": "0.1.9",
+  "description": "页面元素打标工具，支持DOM树浏览、元素高亮、候选选择器生成、本地导出Site Profile JSON。",
+  "permissions": [
+    "scripting",
+    "tabs",
+    "activeTab",
+    "storage",
+    "downloads",
+    "webNavigation",
+    "sidePanel"
+  ],
+  "host_permissions": ["<all_urls>"],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_title": "标定工具",
+    "default_popup": "popup.html"
+  },
+  "side_panel": {
+    "default_path": "sidepanel.html"
+  },
+  "content_scripts": [{
+    "matches": ["http://*/*", "https://*/*"],
+    "js": ["content-script.js"],
+    "css": ["overlay.css"],
+    "all_frames": true,
+    "run_at": "document_end"
+  }]
+}

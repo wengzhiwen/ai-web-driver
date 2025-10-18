@@ -1,0 +1,72 @@
+/* 标定工具Overlay样式 - 优化版本 */
+#__calib_overlay__ {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 2147483647;
+  contain: layout style paint; /* 性能优化 */
+}
+
+.__calib_box {
+  position: absolute;
+  outline: 2px solid #4f46e5;
+  background: rgba(79, 70, 229, 0.06);
+  border-radius: 6px;
+  box-shadow: 0 0 0 1px rgba(79, 70, 229, 0.2), 0 2px 8px rgba(0, 0, 0, 0.1);
+  transition: all 0.15s ease-out; /* 添加平滑过渡 */
+  will-change: transform; /* 性能优化 */
+  pointer-events: none; /* 防止鼠标事件被拦截 */
+}
+
+.__calib_box:hover {
+  outline-color: #4338ca;
+  background: rgba(67, 56, 202, 0.08);
+}
+
+.__calib_tip {
+  position: fixed;
+  right: 12px;
+  bottom: 12px;
+  font: 600 12px system-ui, -apple-system, sans-serif;
+  background: #10b981;
+  color: #fff;
+  padding: 8px 12px;
+  border-radius: 8px;
+  z-index: 2147483648;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  animation: slideInUp 0.3s ease-out;
+  pointer-events: none; /* 防止鼠标事件被拦截 */
+}
+
+@keyframes slideInUp {
+  from {
+    transform: translateY(20px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+/* 深色模式适配 */
+@media (prefers-color-scheme: dark) {
+  .__calib_box {
+    outline-color: #6366f1;
+    background: rgba(99, 102, 241, 0.08);
+    box-shadow: 0 0 0 1px rgba(99, 102, 241, 0.3), 0 2px 8px rgba(0, 0, 0, 0.3);
+  }
+
+  .__calib_box:hover {
+    outline-color: #818cf8;
+    background: rgba(129, 140, 248, 0.12);
+  }
+}
+
+/* 高对比度模式适配 */
+@media (prefers-contrast: high) {
+  .__calib_box {
+    outline-width: 3px;
+    background: rgba(79, 70, 229, 0.1);
+  }
+}

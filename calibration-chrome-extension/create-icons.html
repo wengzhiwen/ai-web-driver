@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>生成图标</title>
+</head>
+<body>
+    <canvas id="canvas" width="128" height="128"></canvas>
+    <div id="output"></div>
+
+    <script>
+        // 创建图标
+        function createIcon(size) {
+            const canvas = document.createElement('canvas');
+            canvas.width = size;
+            canvas.height = size;
+            const ctx = canvas.getContext('2d');
+
+            // 背景 - 圆角矩形
+            ctx.fillStyle = '#4f46e5';
+            roundRect(ctx, 0, 0, size, size, size * 0.15);
+            ctx.fill();
+
+            // 绘制瞄准图标
+            ctx.strokeStyle = '#ffffff';
+            ctx.lineWidth = Math.max(1, size / 32);
+            ctx.fillStyle = '#ffffff';
+
+            const centerX = size / 2;
+            const centerY = size / 2;
+            const radius = size * 0.35;
+
+            // 外圈
+            ctx.beginPath();
+            ctx.arc(centerX, centerY, radius, 0, 2 * Math.PI);
+            ctx.stroke();
+
+            // 十字线
+            ctx.beginPath();
+            ctx.moveTo(centerX - radius, centerY);
+            ctx.lineTo(centerX - radius * 0.3, centerY);
+            ctx.moveTo(centerX + radius * 0.3, centerY);
+            ctx.lineTo(centerX + radius, centerY);
+            ctx.moveTo(centerX, centerY - radius);
+            ctx.lineTo(centerX, centerY - radius * 0.3);
+            ctx.moveTo(centerX, centerY + radius * 0.3);
+            ctx.lineTo(centerX, centerY + radius);
+            ctx.stroke();
+
+            // 中心点
+            ctx.beginPath();
+            ctx.arc(centerX, centerY, size * 0.05, 0, 2 * Math.PI);
+            ctx.fill();
+
+            return canvas;
+        }
+
+        function roundRect(ctx, x, y, width, height, radius) {
+            ctx.beginPath();
+            ctx.moveTo(x + radius, y);
+            ctx.lineTo(x + width - radius, y);
+            ctx.quadraticCurveTo(x + width, y, x + width, y + radius);
+            ctx.lineTo(x + width, y + height - radius);
+            ctx.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
+            ctx.lineTo(x + radius, y + height);
+            ctx.quadraticCurveTo(x, y + height, x, y + height - radius);
+            ctx.lineTo(x, y + radius);
+            ctx.quadraticCurveTo(x, y, x + radius, y);
+            ctx.closePath();
+        }
+
+        // 生成所有尺寸的图标
+        const sizes = [16, 48, 128];
+        const output = document.getElementById('output');
+
+        sizes.forEach(size => {
+            const canvas = createIcon(size);
+            const dataUrl = canvas.toDataURL('image/png');
+
+            // 创建下载链接
+            const link = document.createElement('a');
+            link.download = `icon${size}.png`;
+            link.href = dataUrl;
+            link.textContent = `下载 icon${size}.png`;
+            link.style.display = 'block';
+            link.style.margin = '10px 0';
+
+            // 显示预览
+            const img = document.createElement('img');
+            img.src = dataUrl;
+            img.style.width = size + 'px';
+            img.style.height = size + 'px';
+            img.style.border = '1px solid #ccc';
+            img.style.margin = '5px';
+
+            const div = document.createElement('div');
+            div.appendChild(img);
+            div.appendChild(link);
+            output.appendChild(div);
+        });
+    </script>
+</body>
+</html>

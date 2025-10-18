@@ -1,0 +1,421 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>标定工具</title>
+  <style>
+    :root {
+      font-family: system-ui, -apple-system, 'Segoe UI', Roboto, Ubuntu, 'PingFang SC', 'Noto Sans SC', sans-serif;
+      --primary-color: #4f46e5;
+      --success-color: #10b981;
+      --danger-color: #ef4444;
+      --border-color: #e5e7eb;
+      --text-secondary: #6b7280;
+      --background-light: #f9fafb;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      padding: 0;
+      display: grid;
+      grid-template-rows: auto 1fr auto;
+      height: 100vh;
+      font-size: 13px;
+    }
+
+    /* 头部样式 */
+    header {
+      padding: 12px;
+      border-bottom: 1px solid var(--border-color);
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      background: var(--background-light);
+    }
+
+    header .url {
+      flex: 1;
+      min-width: 0;
+      color: var(--text-secondary);
+      font-size: 12px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    header .toggle-btn {
+      padding: 6px 12px;
+      border: 1px solid var(--border-color);
+      border-radius: 6px;
+      background: white;
+      cursor: pointer;
+      font-size: 12px;
+      transition: all 0.2s;
+    }
+
+    header .toggle-btn.active {
+      background: var(--primary-color);
+      color: white;
+      border-color: var(--primary-color);
+    }
+
+    header .toggle-btn:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+
+    select {
+      font-size: 12px;
+      padding: 4px 8px;
+      border: 1px solid var(--border-color);
+      border-radius: 6px;
+      background: white;
+    }
+
+    /* 主要内容区域 */
+    main {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      padding: 12px;
+      overflow: hidden;
+    }
+
+    .column {
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+      background: white;
+    }
+
+    .column h3 {
+      margin: 0 0 8px 0;
+      font-size: 14px;
+      color: #374151;
+      font-weight: 600;
+    }
+
+    /* 工具栏样式 */
+    .toolbar {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      margin-bottom: 12px;
+      flex-wrap: wrap;
+    }
+
+    .btn {
+      font-size: 12px;
+      padding: 6px 10px;
+      border: 1px solid var(--border-color);
+      border-radius: 6px;
+      background: white;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .btn:hover {
+      background: var(--background-light);
+      transform: translateY(-1px);
+    }
+
+    .btn.primary {
+      background: var(--primary-color);
+      color: white;
+      border-color: var(--primary-color);
+    }
+
+    .btn.primary:hover {
+      background: #4338ca;
+    }
+
+    .btn.danger {
+      background: var(--danger-color);
+      color: white;
+      border-color: var(--danger-color);
+    }
+
+    .btn.danger:hover {
+      background: #dc2626;
+    }
+
+    .btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    input[type="text"] {
+      font-size: 12px;
+      padding: 6px 8px;
+      border: 1px solid var(--border-color);
+      border-radius: 6px;
+      flex: 1;
+      min-width: 120px;
+    }
+
+    input[type="text"]:focus {
+      outline: none;
+      border-color: var(--primary-color);
+      box-shadow: 0 0 0 2px rgba(79, 70, 229, 0.1);
+    }
+
+    /* DOM树样式 */
+    .tree-container {
+      overflow: auto;
+      flex: 1;
+      border: 1px solid var(--border-color);
+      border-radius: 6px;
+      padding: 8px;
+      background: var(--background-light);
+    }
+
+    .tree ul {
+      list-style: none;
+      margin: 0;
+      padding-left: 12px;
+    }
+
+    .tree li {
+      margin: 2px 0;
+    }
+
+    .node {
+      font-size: 12px;
+      padding: 4px 6px;
+      border-radius: 4px;
+      cursor: pointer;
+      transition: background-color 0.2s;
+      line-height: 1.4;
+    }
+
+    .node:hover {
+      background: #e5e7eb;
+    }
+
+    .node .tag {
+      color: var(--primary-color);
+      font-weight: 600;
+    }
+
+    .node .id {
+      color: var(--success-color);
+      font-weight: 500;
+    }
+
+    .node .class {
+      color: var(--text-secondary);
+    }
+
+    .node .test-id {
+      color: #f59e0b;
+      font-weight: 500;
+    }
+
+    .node .aria {
+      color: #10b981;
+      font-size: 11px;
+    }
+
+    .node .link {
+      color: #6366f1;
+      font-size: 11px;
+    }
+
+    .node .input-attr {
+      color: #8b5cf6;
+      font-size: 11px;
+    }
+
+    .node .text {
+      color: #374151;
+      font-size: 11px;
+      font-style: italic;
+    }
+
+    .toggle-btn {
+      color: #6b7280;
+      font-family: monospace;
+      transition: color 0.2s;
+    }
+
+    .toggle-btn:hover {
+      color: #374151;
+    }
+
+    .children-ul {
+      margin-left: 16px;
+      border-left: 1px dashed #e5e7eb;
+      padding-left: 8px;
+    }
+
+    /* 标注列表样式 */
+    .marks-list {
+      flex: 1;
+      overflow: auto;
+    }
+
+    .mark-item {
+      border: 1px solid var(--border-color);
+      border-radius: 6px;
+      padding: 8px;
+      margin-bottom: 8px;
+      background: var(--background-light);
+    }
+
+    .mark-item:hover {
+      border-color: var(--primary-color);
+      box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+    }
+
+    .mark-item .meta {
+      font-size: 11px;
+      color: var(--text-secondary);
+      margin-bottom: 4px;
+    }
+
+    .mark-item .candidates {
+      font-size: 11px;
+      color: var(--text-secondary);
+      margin-bottom: 6px;
+      word-break: break-all;
+    }
+
+    .mark-item code {
+      background: white;
+      padding: 1px 4px;
+      border-radius: 3px;
+      font-family: 'Monaco', 'Consolas', monospace;
+      border: 1px solid var(--border-color);
+    }
+
+    .mark-item textarea {
+      width: 100%;
+      font-size: 12px;
+      padding: 4px;
+      border: 1px solid var(--border-color);
+      border-radius: 4px;
+      resize: vertical;
+      min-height: 40px;
+      font-family: inherit;
+    }
+
+    .mark-item textarea:focus {
+      outline: none;
+      border-color: var(--primary-color);
+      box-shadow: 0 0 0 2px rgba(79, 70, 229, 0.1);
+    }
+
+    .mark-item .actions {
+      display: flex;
+      gap: 6px;
+      margin-top: 6px;
+    }
+
+    /* 底部样式 */
+    footer {
+      padding: 12px;
+      border-top: 1px solid var(--border-color);
+      background: var(--background-light);
+    }
+
+    .hint {
+      font-size: 11px;
+      color: var(--text-secondary);
+      line-height: 1.4;
+    }
+
+    .empty-state {
+      color: var(--text-secondary);
+      font-style: italic;
+      text-align: center;
+      padding: 20px;
+      font-size: 12px;
+    }
+
+    .loading {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      padding: 20px;
+      color: var(--text-secondary);
+      font-size: 12px;
+    }
+
+    .loading::after {
+      content: '';
+      width: 16px;
+      height: 16px;
+      border: 2px solid var(--border-color);
+      border-top-color: var(--primary-color);
+      border-radius: 50%;
+      margin-left: 8px;
+      animation: spin 1s linear infinite;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    /* 响应式调整 */
+    @media (max-width: 600px) {
+      main {
+        grid-template-columns: 1fr;
+        grid-template-rows: 1fr 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <button id="toggleMode" class="toggle-btn">开启标注</button>
+    <div class="url" id="currentUrl" title="当前页面URL">加载中...</div>
+    <select id="frameSelector" title="选择框架">
+      <option value="0">主框架</option>
+    </select>
+  </header>
+
+  <main>
+    <div class="column">
+      <h3>DOM 树结构</h3>
+      <div class="toolbar">
+        <input type="text" id="filterInput" placeholder="搜索文本、value、属性名..." />
+        <button id="refreshTree" class="btn">刷新</button>
+      </div>
+      <div id="treeContainer" class="tree-container">
+        <div class="loading">加载DOM树中...</div>
+      </div>
+    </div>
+
+    <div class="column">
+      <h3>当前页面标注</h3>
+      <div class="toolbar">
+        <button id="exportBtn" class="btn primary">导出</button>
+        <button id="clearBtn" class="btn danger">清空当前页</button>
+      </div>
+      <div id="marksList" class="marks-list">
+        <div class="empty-state">暂无标注数据</div>
+      </div>
+    </div>
+  </main>
+
+  <footer>
+    <div class="hint">
+      <strong>使用提示：</strong><br>
+      • Alt+P：快速切换标注模式<br>
+      • 左侧DOM树：单击=高亮元素，双击=添加标注<br>
+      • 标注模式下直接点击页面元素即可记录
+    </div>
+  </footer>
+
+  <script src="sidepanel.js"></script>
+</body>
+</html>

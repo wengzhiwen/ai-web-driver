@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>标定工具</title>
+  <style>
+    body {
+      width: 300px;
+      padding: 15px;
+      font-family: system-ui, -apple-system, sans-serif;
+      font-size: 14px;
+    }
+
+    .header {
+      text-align: center;
+      margin-bottom: 15px;
+      border-bottom: 1px solid #e5e7eb;
+      padding-bottom: 10px;
+    }
+
+    .button {
+      width: 100%;
+      padding: 10px;
+      margin: 5px 0;
+      border: 1px solid #4f46e5;
+      background: #4f46e5;
+      color: white;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 13px;
+    }
+
+    .button:hover {
+      background: #4338ca;
+    }
+
+    .button.secondary {
+      background: white;
+      color: #4f46e5;
+    }
+
+    .button.secondary:hover {
+      background: #f3f4f6;
+    }
+
+    .info {
+      margin: 10px 0;
+      padding: 8px;
+      background: #f3f4f6;
+      border-radius: 4px;
+      font-size: 12px;
+      text-align: center;
+    }
+
+    .status {
+      text-align: center;
+      margin: 8px 0;
+      font-size: 12px;
+      color: #6b7280;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h3>🎯 标定工具</h3>
+    <div class="status" id="status">准备就绪</div>
+  </div>
+
+  <button class="button" id="toggleBtn">开启标注模式</button>
+  <button class="button secondary" id="sidePanelBtn">打开侧边面板</button>
+  <button class="button secondary" id="exportBtn">导出数据</button>
+
+  <div class="info">
+    <strong>快捷键：</strong> Alt+P 切换标注模式<br>
+    <strong>使用方法：</strong> 开启标注后点击页面元素
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>
