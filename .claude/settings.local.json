@@ -25,7 +25,8 @@
       "Bash(lsof:*)",
       "Bash(kill:*)",
       "Bash(curl:*)",
-      "Bash(pip show:*)"
+      "Bash(pip show:*)",
+      "Bash(find:*)"
     ],
     "deny": [],
     "ask": []
