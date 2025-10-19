@@ -220,3 +220,5 @@ action_plans/*
 !action_plans/plan1/**
 test_requests/*
 log/**
+.playwright-mcp
+.claude
