@@ -11,7 +11,12 @@
 
 ### 标定工具（Profile Builder）
 
-CLI 自动标定草稿开发中，可针对单个 URL 生成 Site Profile 片段并合并：
+- Chrome 插件 MVP（`calibration-chrome-extension/`）
+  - Alt+P 进入标注模式，悬停高亮并点击采集元素，侧边面板可浏览 DOM 树、编辑标注备注。
+  - 每个标注项自动采集标准化 URL、元素指纹、候选选择器、`cssPath`、位置信息等字段，并存储在 `chrome.storage.local`。
+  - 支持按照 Frame 切换、智能节点过滤与搜索，导出符合 `site_profiles` 标准的 JSON，开箱即用地对接执行器。
+
+- CLI 自动标定草稿可针对单个 URL 生成 Site Profile 片段并合并：
 
 ```bash
 python -m profile_builder_mvp.cli \
@@ -44,6 +49,16 @@ python -m profile_builder_mvp.cli \
     --summary
   ```
 - 结果会写入到 `results/` 目录中
+
+### 自然语言测试（NL Driven Testing MVP）
+
+- 将 Markdown/文本测试说明交给 `NL_driven_test_agent/run.py`，由 Claude Code CLI 驱动 Playwright MCP 执行，并生成 Markdown 报告与截图。
+- 工件统一归档到 `test_reports/` 目录，报告包含步骤、断言、错误、截图等信息。
+- 示例：
+
+  ```bash
+  python NL_driven_test_agent/run.py test_requests/筑波大学报名查询.md
+  ```
 
 ### 报告查看器
 
