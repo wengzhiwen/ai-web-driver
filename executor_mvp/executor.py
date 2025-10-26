@@ -14,6 +14,7 @@ from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 from playwright.sync_api import sync_playwright
 
 from .models import ActionPlan, ActionStep, RunResult, StepResult
+from .report_generator import TestReportGenerator
 
 
 @dataclass
@@ -25,6 +26,7 @@ class ExecutorSettings:
     default_timeout_ms: int = 10_000
     output_root: Path = Path("results")
     screenshots: str = "on-failure"  # values: none | on-failure | all
+    generate_report: bool = True  # Enable LLM-powered test report generation
 
 
 class Executor:
@@ -34,6 +36,7 @@ class Executor:
         self.settings = settings or ExecutorSettings()
         self.logger = logging.getLogger("executor_mvp")
         self.logger.setLevel(logging.INFO)
+        self.report_generator = TestReportGenerator() if self.settings.generate_report else None
 
     def run(self, plan: ActionPlan) -> RunResult:
         run_id = self._build_run_id(plan.test_id)
@@ -74,6 +77,17 @@ class Executor:
         finally:
             result.finished_at = datetime.utcnow()
             self._write_run_result(artifacts_dir / "run.json", result)
+
+            # Generate LLM-powered test report if enabled
+            if self.report_generator:
+                try:
+                    self.logger.info("Generating test report...")
+                    report_path = artifacts_dir / "test_report.md"
+                    self.report_generator.generate_report(plan, result, report_path)
+                    self.logger.info("Test report generated at %s", report_path)
+                except Exception as exc:
+                    self.logger.warning("Failed to generate test report: %s", exc)
+
             if log_handler:
                 self.logger.removeHandler(log_handler)
                 log_handler.close()

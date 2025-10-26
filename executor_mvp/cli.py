@@ -58,6 +58,11 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Print the run.json payload to stdout upon completion",
     )
+    parser.add_argument(
+        "--no-report",
+        action="store_true",
+        help="Disable LLM-powered test report generation",
+    )
     return parser
 
 
@@ -73,6 +78,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         default_timeout_ms=args.timeout,
         output_root=Path(args.output),
         screenshots=args.screenshots,
+        generate_report=not args.no_report,
     )
 
     executor = Executor(settings=settings)
@@ -82,6 +88,28 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     print(f"Run {result.run_id} finished with status {result.status}")
     print(f"Artifacts: {result.artifacts_dir}")
+
+    # Display report summary if available
+    report_path = Path(result.artifacts_dir) / "test_report.md"
+    if report_path.exists():
+        print(f"📊 Test report generated: {report_path}")
+        # Display a brief summary
+        try:
+            report_content = report_path.read_text(encoding="utf-8")
+            lines = report_content.split('\n')
+            # Find and display the first few lines of the report
+            summary_lines = []
+            for line in lines[:10]:  # Show first 10 lines
+                if line.strip():
+                    summary_lines.append(line)
+                if summary_lines and line.startswith('##'):
+                    break  # Stop at next major section
+            if summary_lines:
+                print("\n📋 Report Summary:")
+                for line in summary_lines:
+                    print(f"  {line}")
+        except Exception as exc:
+            print(f"⚠️  Could not read report: {exc}")
 
     if args.summary:
         print(json.dumps(result.to_dict(), ensure_ascii=False, indent=2))
