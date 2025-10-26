@@ -23,7 +23,7 @@ except ImportError:  # pragma: no cover - optional dependency
 
 from .dom_refiner import refine_dom_summary
 from .llm_annotator import LLMAnnotator
-from .models import AliasDefinition, AnnotatedPage, AnnotationRequest, FetchOptions
+from .models import (AliasDefinition, AnnotatedPage, AnnotationRequest, FetchOptions, FetchedPage, TestCaseContext)
 from .page_fetcher import fetch_page
 from .profile_merger import merge_page_into_profile
 
@@ -37,6 +37,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--url", required=True, help="目标页面 URL")
     parser.add_argument("--base-url", help="站点的 base URL，用于提示 LLM")
     parser.add_argument("--site-name", help="站点名称，用于提示 LLM 和输出")
+    parser.add_argument("--page-name", help="指定页面名称，跳过自动推测与命名")
     parser.add_argument("--output", help="将本次生成结果写入独立 JSON 文件")
     parser.add_argument("--append-to", help="将结果合并追加到既有 Site Profile 文件中")
     parser.add_argument(
@@ -77,6 +78,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--dry-run", action="store_true", help="仅输出到终端，不写入文件")
     parser.add_argument("--interactive", action="store_true", help="开启交互模式")
     parser.add_argument("--debug", action="store_true", help="启用 DEBUG 日志")
+    parser.add_argument(
+        "--test-case",
+        dest="test_cases",
+        action="append",
+        help="指定测试用例文件路径或直接输入描述，可多次提供以增强 LLM 分析",
+    )
     return parser
 
 
@@ -115,7 +122,34 @@ def _slug_from_url(url: str) -> str:
     return sanitized
 
 
-def _annotate(dom_result, args, *, is_detail_page: bool, detail_label: Optional[str]) -> AnnotationRequest:
+def _collect_test_cases(raw_inputs: Optional[Sequence[str]]) -> list[TestCaseContext]:
+    cases: list[TestCaseContext] = []
+    if not raw_inputs:
+        return cases
+    for idx, raw in enumerate(raw_inputs, 1):
+        if not raw:
+            continue
+        candidate = Path(raw)
+        if candidate.exists():
+            try:
+                content = candidate.read_text(encoding="utf-8").strip()
+            except OSError as exc:
+                LOGGER.warning("读取测试用例失败: %s", exc)
+                continue
+            if not content:
+                LOGGER.info("测试用例文件为空，已跳过: %s", candidate)
+                continue
+            cases.append(TestCaseContext(name=candidate.name, content=content))
+            continue
+        stripped = raw.strip()
+        if stripped:
+            cases.append(TestCaseContext(name=f"inline_case_{idx}", content=stripped))
+    return cases
+
+
+# pylint: disable=too-many-arguments
+def _annotate(dom_result, args, *, is_detail_page: bool, detail_label: Optional[str], explicit_page_name: Optional[str],
+              test_cases: list[TestCaseContext]) -> AnnotationRequest:
     return AnnotationRequest(
         url=dom_result.url,
         title=dom_result.title,
@@ -125,6 +159,8 @@ def _annotate(dom_result, args, *, is_detail_page: bool, detail_label: Optional[
         temperature=args.temperature,
         is_detail_page=is_detail_page,
         detail_label=detail_label,
+        explicit_page_name=explicit_page_name,
+        test_cases=test_cases,
     )
 
 
@@ -272,7 +308,7 @@ def _control_is_button(control: Dict[str, Any]) -> bool:
     return role in {"button", "link"}
 
 
-def _control_to_selector(control: Dict[str, Any]) -> Optional[str]:
+def _control_to_selector(control: Dict[str, Any]) -> Optional[str]:  # pylint: disable=too-many-return-statements
     element_id = control.get("id")
     if element_id:
         return f"#{element_id}"
@@ -322,7 +358,6 @@ def _find_first_child(root: Dict[str, Any], predicate) -> Optional[Dict[str, Any
 
 
 def _match_search_container(node: Dict[str, Any]) -> bool:
-    tag = (node.get("tag") or "").lower()
     attrs = node.get("attrs") or {}
     role = (attrs.get("role") or "").lower()
     class_attr = (attrs.get("class") or "").lower()
@@ -374,13 +409,17 @@ def _build_selector_path(node: Dict[str, Any]) -> Optional[str]:
     return selector
 
 
-def main(argv: Sequence[str] | None = None) -> int:
+def main(argv: Sequence[str] | None = None) -> int:  # pylint: disable=too-many-return-statements,too-many-locals,too-many-branches,too-many-statements
     load_dotenv()
 
     parser = build_parser()
     args = parser.parse_args(argv)
 
     _setup_logging(args.debug)
+
+    test_cases = _collect_test_cases(args.test_cases)
+    if test_cases:
+        LOGGER.info("已加载 %s 条测试用例上下文", len(test_cases))
 
     run_id = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     run_dir = SITE_PROFILES_ROOT / run_id
@@ -439,6 +478,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         args,
         is_detail_page=is_detail_page,
         detail_label=detail_label,
+        explicit_page_name=args.page_name,
+        test_cases=test_cases,
     )
     try:
         annotated_page = annotator.annotate(request)
@@ -450,7 +491,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     for log in enhancement_logs:
         LOGGER.info("标定增强: %s", log)
 
-    if is_detail_page:
+    if args.page_name:
+        annotated_page.page_name = args.page_name
+        LOGGER.info("页面名称已按用户指定固定: %s", args.page_name)
+    elif is_detail_page:
         original_name = annotated_page.page_name
         desired_name = request.detail_label or _abstract_detail_page_name(original_name, fetched.title)
         if desired_name != original_name:

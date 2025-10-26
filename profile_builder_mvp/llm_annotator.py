@@ -58,7 +58,7 @@ def _strip_json_comments(snippet: str) -> str:
     return '\n'.join(line for line in cleaned.splitlines())
 
 
-def _extract_json(payload: str) -> Dict[str, Any]:
+def _extract_json(payload: str) -> Dict[str, Any]:  # pylint: disable=too-many-branches
     """Try to parse JSON from the LLM response."""
 
     try:
@@ -165,13 +165,13 @@ def _normalise_aliases(raw_aliases: Any) -> List[AliasDefinition]:
     return results
 
 
-class LLMAnnotator:
+class LLMAnnotator:  # pylint: disable=too-few-public-methods
     """Annotates DOM snapshots via LLM prompts."""
 
     def __init__(self, client: Optional[LLMClient] = None) -> None:
         self.client = client or LLMClient()
 
-    def annotate(self, request: AnnotationRequest) -> AnnotatedPage:
+    def annotate(self, request: AnnotationRequest) -> AnnotatedPage:  # pylint: disable=too-many-locals
         dom_json = json.dumps(request.dom_summary, ensure_ascii=False, indent=2)
         LOGGER.debug("DOM 摘要 token 约 %s 字符", len(dom_json))
 
@@ -182,6 +182,22 @@ class LLMAnnotator:
         else:
             detail_hint = ""
         detail_line = f"页面类型提示: {detail_hint}\n" if detail_hint else ""
+
+        page_name_line = ""
+        if request.explicit_page_name:
+            page_name_line = (f"页面名称固定为“{request.explicit_page_name}”，请直接沿用该名称，"
+                              "不要尝试重新命名。\n")
+
+        cases_line = ""
+        if request.test_cases:
+            rendered_cases: List[str] = []
+            for idx, case in enumerate(request.test_cases, 1):
+                content = case.content.strip()
+                max_len = 2000
+                if len(content) > max_len:
+                    content = content[:max_len].rstrip() + "\n...(后续内容已截断)"
+                rendered_cases.append(f"测试用例 {idx}（{case.name}）:\n{content}")
+            cases_line = "以下测试用例可帮助理解页面功能，请重点照顾其中提及的关键交互：\n" + "\n\n".join(rendered_cases) + "\n\n"
 
         messages = [
             {
@@ -198,6 +214,8 @@ class LLMAnnotator:
                             f"站点名称: {request.site_name or '未提供'}\n"
                             f"站点 BaseURL: {request.base_url or '未提供'}\n"
                             f"{detail_line}"
+                            f"{page_name_line}"
+                            f"{cases_line}"
                             "请输出 JSON，字段示例如下：\n"
                             "{\n  \"page\": {\n    \"id\": \"page_id\",\n    \"name\": \"页面名称\",\n"
                             "    \"url_pattern\": \"/path\",\n    \"summary\": \"页面用途概述\",\n    \"aliases\": {\n"
@@ -228,6 +246,8 @@ class LLMAnnotator:
             raise ValueError("LLM 返回结果缺少 page.id")
 
         page_name = page_payload.get("name") or page_payload.get("title") or page_id
+        if request.explicit_page_name:
+            page_name = request.explicit_page_name
         url_pattern = page_payload.get("url_pattern") or page_payload.get("path") or request.url
         summary = page_payload.get("summary") or page_payload.get("description")
 

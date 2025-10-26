@@ -18,7 +18,7 @@
 - CLI 日志输出遵循 `./log` 目录、按自然日滚动的约定。
 
 ## 4. 核心流程
-1. **输入解析**：读取 CLI 参数，包含目标 URL、可选的输出路径、合并目标 Profile、LLM 模型配置等。
+1. **输入解析**：读取 CLI 参数，包含目标 URL、可选的输出路径、合并目标 Profile、LLM 模型配置等；若用户通过 `--page-name` 指定页面名称，则后续流程固定该名称，不再触发自动命名；`--test-case` 可多次提供文件或文本，作为 LLM 的功能理解参考。
 2. **页面抓取**：
    - 使用 Playwright headless 模式加载目标 URL。
    - 支持设置超时与可选的等待策略（如 `--wait-for` selector）。
@@ -28,6 +28,7 @@
    - 构造提示词，包含页面上下文（URL、标题）、抽取的 DOM 片段、预设的标定指导语。
    - 先整体理解整个页面的大致功能，再逐功能区块进行解析和抽取。
    - 适当控制上下文长度：对 DOM 按区域/深度分块（事实上现代LLM的上下文长度很夸张不用过分小心），依次请求 LLM，最后聚合结果。
+   - 若提供测试用例，上述提示词会额外描述这些用例的业务目标与关键交互，引导 LLM 按照测试关注点挑选元素。
    - 输出包含页面元信息、元素别名、定位器建议、优先级标签、自然语言描述等。
 4. **结果组装**：
    - 将 LLM 返回的标定结果转化为标准 Site Profile 页面节点。
@@ -57,6 +58,8 @@
 ```
 python -m profile_builder.cli \
   --url https://example.com/products \
+  --page-name '产品列表页' \
+  --test-case docs/test_cases/products_smoke.md \
   --output site_profiles/drafts/products_autogen.json \
   --append-to site_profiles/shop.json \
   --max-depth 5 \
@@ -66,13 +69,15 @@ python -m profile_builder.cli \
 - `--url`（必填）：目标页面 URL。
 - `--output`：独立输出文件路径；未指定时默认写入 `site_profiles/<时间戳>/<域名-路径>.json`，文件名会按需截断并附加哈希避免过长。
 - `--append-to`：合并目标 Profile 文件路径。
+- `--page-name`：显式指定页面名称，LLM 输出与后处理均以该名称为准，避免详情页场景下的额外命名推测。
+- `--test-case`：可多次传入，支持文件路径或直接文本；CLI 会读取内容并附加到 LLM 提示词中，用于强调需要重点覆盖的业务流程。
 - `--temperature`：LLM 采样温度；模型名称沿用环境变量 `MODEL_STD`。
 - `--max-depth` / `--max-nodes`：控制 DOM 提取规模（默认 8 / 1000）。CLI 会在标准输出中报告“限制/实际”的深度与节点数量，便于观察抽取情况。
 - `--wait-for`：在抓取前等待特定 selector，以提升动态站点稳定性。
 - `--include-screenshot`：可选生成页面截图供后续人工校对。
 - `--dry-run`：仅生成终端预览，不落地文件。
 - `--interactive`：开启交互模式，逐步处理长文本与重复结构。
-- 每次运行都会询问页面是否为详情页，用于提示 LLM 在描述时更趋抽象；若为详情页，会依据 URL 自动生成如“博客详情页”等页面名称。
+- 每次运行都会询问页面是否为详情页，用于提示 LLM 在描述时更趋抽象；若为详情页，会依据 URL 自动生成如“博客详情页”等页面名称；当用户已经提供 `--page-name` 时跳过这一自动命名逻辑。
 - 针对搜索区域这类容器，CLI 会自动补充输入框与按钮等常用交互元素别名，避免遗漏核心控件。
 > 若未指定 `--append-to` 或 `--output`，CLI 会将结果写入 `site_profiles/<时间戳>/<域名-路径>.json`，避免覆盖历史草稿。
 

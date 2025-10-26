@@ -17,7 +17,7 @@ class FetchOptions:
 
 
 @dataclass
-class FetchedPage:
+class FetchedPage:  # pylint: disable=too-many-instance-attributes
     """Snapshot of a fetched page."""
 
     url: str
@@ -31,7 +31,15 @@ class FetchedPage:
 
 
 @dataclass
-class AnnotationRequest:
+class TestCaseContext:
+    """Test case info fed into the annotator."""
+
+    name: str
+    content: str
+
+
+@dataclass
+class AnnotationRequest:  # pylint: disable=too-many-instance-attributes
     """Payload sent to the LLM annotator."""
 
     url: str
@@ -43,6 +51,8 @@ class AnnotationRequest:
     temperature: float = 0.2
     is_detail_page: bool = False
     detail_label: Optional[str] = None
+    explicit_page_name: Optional[str] = None
+    test_cases: List[TestCaseContext] = field(default_factory=list)
 
 
 @dataclass
