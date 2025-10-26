@@ -24,7 +24,19 @@ class DSLSpecification:
                       "2. 文本匹配请使用 :has-text(...) 或 Playwright 的 get_by_text，例如 .card:has-text('提交').\n"
                       "3. 优先使用站点 Profile 中提供的别名 selector（aliases），如 search.input、detail.title 等。\n"
                       "4. 文本断言和点击需指向具体元素，必要时在 selector 末尾追加 :has-text('具体文本').\n"
-                      "5. 断言步骤的文本与随后的点击需匹配同一条数据项。\n")
+                      "5. 断言步骤的文本与随后的点击需匹配同一条数据项。\n"
+                      "6. **操作类型匹配规则**：\n"
+                      "   - **fill 操作**：必须选择输入框类元素（input、textbox、search等），切勿选择按钮或链接\n"
+                      "   - **click 操作**：必须选择可交互元素（button、link、buy按钮等），切勿选择纯文本元素\n"
+                      "   - **assert 操作**：可选择显示元素（title、text、label等），用于验证内容\n"
+                      "7. **商品操作特别规则**：\n"
+                      "   - 验证商品名称时使用文本类选择器\n"
+                      "   - 点击商品时必须使用购买按钮或链接类选择器\n"
+                      "   - 切勿将商品名称文本作为点击目标\n"
+                      "8. **图片验证规则**：\n"
+                      "   - 验证图片显示时使用img选择器，但不要验证图片包含文本\n"
+                      "   - 图片验证应检查图片的visible状态，而非text内容\n"
+                      "   - 切勿使用img:has-text()这类无效的组合\n")
 
         return ("你需要按照以下 JSON Schema 生成 ActionPlan DSL。\n"
                 "### JSON Schema\n"
@@ -79,18 +91,29 @@ def load_dsl_specification(schema_path: Path) -> DSLSpecification:
             },
             {
                 "t": "fill",
-                "selector": "input#username",
-                "value": "tester"
+                "selector": "input#search",
+                "value": "关键词"
             },
             {
                 "t": "click",
-                "selector": "button#submit"
+                "selector": "button.search-btn",
+                "value": "搜索"
             },
             {
                 "t": "assert",
-                "selector": "h1.page-title",
+                "selector": ".result-item .title",
+                "kind": "visible"
+            },
+            {
+                "t": "click",
+                "selector": ".result-item .buy-btn",
+                "value": "购买按钮"
+            },
+            {
+                "t": "assert",
+                "selector": ".product-title",
                 "kind": "text_contains",
-                "value": "欢迎",
+                "value": "商品详情",
             },
         ],
     }

@@ -15,6 +15,7 @@ from .models import CompilationResult, CompiledStep, SiteAlias, SiteProfile, Tes
 
 JSON_BLOCK_RE = re.compile(r"```(?:json)?\s*(\{.*?\})\s*```", re.DOTALL)
 CONTAINS_SELECTOR_PATTERN = re.compile(r":contains\((['\"])\s*(.*?)\s*\1\)")
+COUNT_ASSERT_KINDS = {"count_equals", "count_at_least"}
 
 
 def extract_json_block(text: str) -> str:
@@ -225,6 +226,7 @@ class LLMCompilationPipeline:
             if not isinstance(selector, str):
                 continue
             step_type = (step.get("t") or "").lower()
+            kind = (step.get("kind") or "").lower()
             alias = matched_aliases[index]
 
             if step.get("kind") == "text_contains" and isinstance(step.get("value"), str):
@@ -237,6 +239,11 @@ class LLMCompilationPipeline:
                 continue
 
             if step_type == "assert":
+                if kind in COUNT_ASSERT_KINDS:
+                    # 数量断言依赖元素计数，不应附加文案过滤
+                    if step.get("value") is None and last_value is not None:
+                        step["value"] = last_value
+                    continue
                 value = step.get("value")
                 if not value and alias:
                     value = value_by_alias.get(alias.selector) or value_by_alias.get(alias.name)
@@ -264,10 +271,36 @@ class LLMCompilationPipeline:
                             value = value_by_alias.get(related.selector) or value_by_alias.get(related.name)
                 if not value:
                     value = last_value
+
+                # 智能修正：检测并修正商品名称文本点击 -> 购买按钮点击
+                # 即使没有value，也可以尝试从上下文推断进行修正
+                corrected = self._correct_product_text_to_buy_button(selector, step, alias, aliases, value_by_alias, last_value)
+                if corrected:
+                    selector, alias, value = corrected
+
                 if value:
-                    step["selector"] = self._append_has_text(selector, value)
-                    step.setdefault("value", value)
-                    if alias:
+                    # 检查是否为购买按钮，如果是则不加has-text
+                    is_buy_button = alias and any(
+                        keyword in alias.name.lower() or keyword in (alias.description or "").lower()
+                        for keyword in ['buy', 'purchase', '购买', 'buy_list', 'shoppingCart_list']
+                    )
+
+                    # 检查是否为图片验证，图片不应包含文本
+                    is_image_assertion = (
+                        step.get("kind") == "visible" and
+                        ("img" in selector.lower() or (alias and "image" in alias.name.lower()))
+                    )
+
+                    if is_buy_button or is_image_assertion:
+                        step["selector"] = selector  # 购买按钮和图片都不加has-text
+                        # 图片验证应该移除value字段，因为不验证文本内容
+                        if is_image_assertion:
+                            step.pop("value", None)
+                    else:
+                        step["selector"] = self._append_has_text(selector, value)
+                        step.setdefault("value", value)
+
+                    if alias and not is_image_assertion:
                         value_by_alias[alias.selector] = value
                         value_by_alias[alias.name] = value
 
@@ -277,6 +310,87 @@ class LLMCompilationPipeline:
             return selector
         escaped = value.replace('"', '\"')
         return f'{selector}:has-text("{escaped}")'
+
+    @staticmethod
+    def _correct_product_text_to_buy_button(
+        selector: str,
+        step: Dict[str, object],
+        alias: Optional[SiteAlias],
+        aliases: List[SiteAlias],
+        value_by_alias: Dict[str, str],
+        last_value: Optional[str] = None
+    ) -> Optional[Tuple[str, SiteAlias, str]]:
+        """智能修正：将商品名称文本点击修正为购买按钮点击"""
+
+        selector_lower = selector.lower()
+
+        # 定义商品名称特征
+        product_name_indicators = {'name', 'title', '商品', '名称', 'p', 'h3', 'h4', 'h5', 'h6'}
+        text_element_indicators = {'text', 'content', 'label'}
+
+        # 检测是否为商品名称相关的文本点击
+        is_product_name = False
+        if alias:
+            alias_name_lower = alias.name.lower()
+            alias_desc_lower = (alias.description or "").lower()
+            is_product_name = (
+                any(indicator in alias_name_lower for indicator in product_name_indicators) or
+                any(indicator in alias_desc_lower for indicator in product_name_indicators)
+            )
+
+        # 如果没有匹配别名或别名不匹配，则检查选择器本身
+        if not is_product_name:
+            is_product_name = (
+                any(indicator in selector_lower for indicator in product_name_indicators) or
+                any(indicator in selector_lower for indicator in text_element_indicators) or
+                # 特殊模式：检测选择器是否指向商品列表中的文本元素
+                ('proView_list' in selector_lower and any(tag in selector_lower for tag in ['p', 'h3', 'h4', 'h5', 'h6']))
+            )
+
+        if not is_product_name:
+            return None
+
+        # 确定页面ID：优先使用alias的页面ID，否则从所有buy按钮中推断
+        target_page_id = alias.page_id if alias else None
+
+        # 查找对应的购买按钮别名
+        for candidate_alias in aliases:
+            candidate_name_lower = candidate_alias.name.lower()
+            candidate_desc_lower = (candidate_alias.description or "").lower()
+
+            # 购买按钮特征
+            buy_button_indicators = {'buy', 'purchase', '购买', 'button', 'btn', 'list_buyBox', 'buy_list', 'shoppingCart_list'}
+
+            is_buy_button = (
+                any(indicator in candidate_name_lower for indicator in buy_button_indicators) or
+                any(indicator in candidate_desc_lower for indicator in buy_button_indicators)
+            )
+
+            # 检查页面匹配
+            page_matches = True
+            if target_page_id:
+                page_matches = candidate_alias.page_id == target_page_id
+            else:
+                # 如果没有确定页面，检查选择器是否在相同容器中
+                page_matches = 'proView_list' in candidate_alias.selector
+
+            if is_buy_button and page_matches:
+                # 检查是否在相同的容器结构中
+                if alias:
+                    alias_selector_parts = alias.selector.split()
+                    candidate_selector_parts = candidate_alias.selector.split()
+                    common_parts = set(alias_selector_parts) & set(candidate_selector_parts)
+                    if len(common_parts) >= 2 or 'proView_list' in candidate_alias.selector:
+                        value = step.get("value") or value_by_alias.get(alias.selector) or value_by_alias.get(alias.name)
+                        return candidate_alias.selector, candidate_alias, value
+                else:
+                    # 没有匹配别名时，直接匹配包含proView_list的购买按钮
+                    if 'proView_list' in candidate_alias.selector:
+                        value = step.get("value") or last_value
+                        # 购买按钮本身通常不包含商品名称文本，所以不加has-text
+                        return candidate_alias.selector, candidate_alias, value
+
+        return None
 
     @staticmethod
     def _find_related_item_alias(list_alias: SiteAlias, aliases: List[SiteAlias]) -> Optional[SiteAlias]:
@@ -317,6 +431,18 @@ class LLMCompilationPipeline:
             if alias.selector.lower() in lowered_selector:
                 return alias.selector, alias
 
+        # 操作类型感知的别名匹配
+        step_type = (step.get("t") or "").lower()
+        if step_type == "click":
+            # 点击操作：优先匹配按钮、链接等交互元素
+            return LLMCompilationPipeline._find_click_target_alias(selector, aliases)
+        elif step_type == "fill":
+            # 输入操作：优先匹配输入框
+            return LLMCompilationPipeline._find_input_target_alias(selector, aliases)
+        elif step_type == "assert":
+            # 断言操作：优先匹配文本、标题等显示元素
+            return LLMCompilationPipeline._find_assert_target_alias(selector, aliases)
+
         title_aliases = [
             alias for alias in aliases if "title" in alias.name.lower() or "heading" in alias.name.lower() or (
                 alias.description and "标题" in alias.description) or (alias.description and "title" in alias.description.lower())
@@ -326,6 +452,7 @@ class LLMCompilationPipeline:
             alias = title_aliases[0]
             return alias.selector, alias
 
+        # 兼容原有的大学列表逻辑
         if "university-list" in lowered_selector or "nav-link" in lowered_selector:
             for alias in aliases:
                 name_lower = alias.name.lower()
@@ -389,6 +516,105 @@ class LLMCompilationPipeline:
 
         return selector, None
 
+    @staticmethod
+    def _find_click_target_alias(selector: str, aliases: List[SiteAlias]) -> Tuple[str, Optional[SiteAlias]]:
+        """为点击操作智能匹配别名，优先匹配按钮、链接等交互元素"""
+        lowered_selector = selector.lower()
+        selector_tokens = LLMCompilationPipeline._extract_tokens(selector)
+
+        # 定义交互元素的关键词
+        interactive_keywords = {
+            'button', 'btn', 'buy', 'purchase', 'click', 'link', 'submit', 'confirm',
+            '按钮', '购买', '点击', '提交', '确定', '购买按钮', 'buy_list', 'buybtn'
+        }
+
+        # 优先匹配包含交互关键词的别名
+        best_alias: Optional[SiteAlias] = None
+        best_score = 0
+
+        for alias in aliases:
+            score = 0
+            alias_name_tokens = LLMCompilationPipeline._extract_tokens(alias.name)
+            alias_desc_tokens = LLMCompilationPipeline._extract_tokens(alias.description)
+
+            # 检查是否包含交互关键词
+            interactive_matches = len(selector_tokens & interactive_keywords)
+            name_interactive_matches = len(alias_name_tokens & interactive_keywords)
+            desc_interactive_matches = len(alias_desc_tokens & interactive_keywords)
+
+            if name_interactive_matches > 0 or desc_interactive_matches > 0:
+                score += 10 * (name_interactive_matches + desc_interactive_matches)
+
+            # 检查selector相似度
+            selector_similarity = len(selector_tokens & alias_name_tokens)
+            if selector_similarity > 0:
+                score += 5 * selector_similarity
+
+            # 特殊匹配规则：商品名称文本 -> 购买按钮
+            if ('product' in selector_tokens or '商品' in selector_tokens or
+                'item' in selector_tokens) and ('name' in selector_tokens or '名称' in selector_tokens):
+                if (name_interactive_matches > 0 or desc_interactive_matches > 0) and any(
+                    keyword in alias.name.lower() or keyword in (alias.description or "").lower()
+                    for keyword in ['buy', 'purchase', '购买', 'buy_list']
+                ):
+                    score += 15  # 给予额外权重
+
+            if score > best_score:
+                best_score = score
+                best_alias = alias
+
+        if best_alias and best_score > 5:  # 设置最低分数阈值
+            return best_alias.selector, best_alias
+
+        return selector, None
+
+    @staticmethod
+    def _find_input_target_alias(selector: str, aliases: List[SiteAlias]) -> Tuple[str, Optional[SiteAlias]]:
+        """为输入操作智能匹配别名，优先匹配输入框"""
+        lowered_selector = selector.lower()
+        selector_tokens = LLMCompilationPipeline._extract_tokens(selector)
+
+        # 定义输入元素的关键词
+        input_keywords = {
+            'input', 'field', 'textbox', 'text', 'search', 'fill', 'enter',
+            '输入', '框', '文本框', '搜索', '填入', 'searchData', 'searchDatahead'
+        }
+
+        for alias in aliases:
+            alias_name_tokens = LLMCompilationPipeline._extract_tokens(alias.name)
+            alias_desc_tokens = LLMCompilationPipeline._extract_tokens(alias.description)
+
+            # 检查是否包含输入关键词
+            if (alias_name_tokens & input_keywords or
+                alias_desc_tokens & input_keywords or
+                selector_tokens & input_keywords):
+                return alias.selector, alias
+
+        return selector, None
+
+    @staticmethod
+    def _find_assert_target_alias(selector: str, aliases: List[SiteAlias]) -> Tuple[str, Optional[SiteAlias]]:
+        """为断言操作智能匹配别名，优先匹配文本、标题等显示元素"""
+        lowered_selector = selector.lower()
+        selector_tokens = LLMCompilationPipeline._extract_tokens(selector)
+
+        # 定义显示元素的关键词
+        display_keywords = {
+            'title', 'text', 'label', 'name', 'content', 'value', 'price',
+            '标题', '文本', '名称', '内容', '价格', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6'
+        }
+
+        for alias in aliases:
+            alias_name_tokens = LLMCompilationPipeline._extract_tokens(alias.name)
+            alias_desc_tokens = LLMCompilationPipeline._extract_tokens(alias.description)
+
+            # 检查是否包含显示关键词
+            if (alias_name_tokens & display_keywords or
+                alias_desc_tokens & display_keywords):
+                return alias.selector, alias
+
+        return selector, None
+
     def _validate_against_profile(
         self,
         result: CompilationResult,
@@ -401,6 +627,8 @@ class LLMCompilationPipeline:
             "text_equals",
             "text_regex",
             "invisible",
+            "count_equals",
+            "count_at_least",
         }
         errors: List[str] = []
 

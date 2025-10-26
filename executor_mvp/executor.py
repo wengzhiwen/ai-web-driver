@@ -17,6 +17,7 @@ from .models import ActionPlan, ActionStep, RunResult, StepResult
 
 
 @dataclass
+# pylint: disable=too-few-public-methods
 class ExecutorSettings:
     """Runtime knobs for the executor."""
 
@@ -79,6 +80,7 @@ class Executor:
 
         return result
 
+    # pylint: disable=too-many-arguments,too-many-positional-arguments,too-many-locals
     def _run_step(
         self,
         page,
@@ -173,32 +175,69 @@ class Executor:
         timeout = self.settings.default_timeout_ms
         locator.first.click(timeout=timeout)
 
+    # pylint: disable=too-many-branches
     def _handle_assert(self, page, step: ActionStep) -> None:
         if not step.kind:
             raise ValueError("assert step missing 'kind'")
         if not step.selector:
             raise ValueError("assert step missing 'selector'")
-        locator = page.locator(step.selector).first
+        locator = page.locator(step.selector)
+        first = locator.first
         timeout = self.settings.default_timeout_ms
 
         if step.kind == "visible":
-            locator.wait_for(state="visible", timeout=timeout)
+            first.wait_for(state="visible", timeout=timeout)
         elif step.kind == "text_contains":
             expected = step.value
             if expected is None:
                 raise ValueError("text_contains assertion requires 'value'")
-            text = locator.text_content(timeout=timeout) or ""
+            text = first.text_content(timeout=timeout) or ""
             if expected not in text:
                 raise AssertionError(f"Expected '{expected}' to be contained in '{text.strip()}'")
         elif step.kind == "text_equals":
             expected = step.value
             if expected is None:
                 raise ValueError("text_equals assertion requires 'value'")
-            text = locator.text_content(timeout=timeout) or ""
+            text = first.text_content(timeout=timeout) or ""
             if text.strip() != expected:
                 raise AssertionError(f"Expected '{expected}' but got '{text.strip()}'")
+        elif step.kind == "count_equals":
+            expected = self._parse_expected_count(step.value, "count_equals")
+            self._wait_for_count_target(first, timeout, expected)
+            actual = locator.count()
+            if actual != expected:
+                raise AssertionError(f"Expected {expected} elements but found {actual} for selector {step.selector}")
+        elif step.kind == "count_at_least":
+            expected = self._parse_expected_count(step.value, "count_at_least")
+            self._wait_for_count_target(first, timeout, expected)
+            actual = locator.count()
+            if actual < expected:
+                raise AssertionError(f"Expected at least {expected} elements but found {actual} for selector {step.selector}")
         else:
             raise ValueError(f"Unsupported assert kind: {step.kind}")
+
+    @staticmethod
+    def _parse_expected_count(raw_value: Optional[str], kind: str) -> int:
+        if raw_value is None:
+            raise ValueError(f"{kind} assertion requires 'value'")
+        if isinstance(raw_value, (int, float)):
+            expected = int(raw_value)
+        else:
+            text = str(raw_value).strip()
+            if not text:
+                raise ValueError(f"{kind} assertion requires numeric 'value'")
+            if not text.isdigit():
+                raise ValueError(f"{kind} assertion requires integer 'value', got '{text}'")
+            expected = int(text)
+        if expected < 0:
+            raise ValueError(f"{kind} assertion requires non-negative 'value'")
+        return expected
+
+    @staticmethod
+    def _wait_for_count_target(locator, timeout: int, expected: int) -> None:
+        if expected <= 0:
+            return
+        locator.wait_for(state="visible", timeout=timeout)
 
     def _prepare_artifacts(self, run_id: str) -> Path:
         root = self.settings.output_root
