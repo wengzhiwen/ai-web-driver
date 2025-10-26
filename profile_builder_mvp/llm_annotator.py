@@ -197,12 +197,16 @@ class LLMAnnotator:  # pylint: disable=too-few-public-methods
                 if len(content) > max_len:
                     content = content[:max_len].rstrip() + "\n...(后续内容已截断)"
                 rendered_cases.append(f"测试用例 {idx}（{case.name}）:\n{content}")
-            cases_line = "以下测试用例可帮助理解页面功能，请重点照顾其中提及的关键交互：\n" + "\n\n".join(rendered_cases) + "\n\n"
+            cases_line = ("**重要**：以下测试用例包含了具体的交互需求，请仔细分析其中提到的位置要求（如'第1个'、'第5个'链接等），"
+                   "为这些特定位置的元素生成精确的别名。使用CSS伪类选择器如:nth-child(n)来定位指定位置的元素。\n\n"
+                   "测试用例可帮助理解页面功能，请重点照顾其中提及的关键交互：\n" + "\n\n".join(rendered_cases) + "\n\n")
 
         messages = [
             {
                 "role": "system",
                 "content": ("你是前端测试工程专家，需要从页面 DOM 摘要中提取可用于 UI 自动化的元素别名。先理解页面的大致功能，再逐功能区块进行解析和抽取。"
+                            "**特别注意**：仔细分析测试用例中提到的具体位置要求（如'第1个'、'第5个'、'第N个'），为这些特定位置的元素生成精确的别名，使用:nth-child()等CSS选择器来定位。"
+                            "对于同类型的多个元素（如链接列表、商品列表等），如果测试用例中指定了具体位置，请为该位置生成单独的精确别名。"
                             "输出严格符合 JSON 格式，包含页面元信息、别名和推荐选择器。"),
             },
             {

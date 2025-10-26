@@ -24,6 +24,7 @@ except ImportError:  # pragma: no cover - optional dependency
 from .dom_refiner import refine_dom_summary
 from .llm_annotator import LLMAnnotator
 from .models import (AliasDefinition, AnnotatedPage, AnnotationRequest, FetchOptions, FetchedPage, TestCaseContext)
+import re
 from .page_fetcher import fetch_page
 from .profile_merger import merge_page_into_profile
 
@@ -188,15 +189,20 @@ def _single_page_profile(annotated_page) -> Dict[str, object]:
 
 
 def _ask_detail_page() -> bool:
-    while True:
-        answer = input("该页面是否为详情页（需要更抽象的描述）？[y/N] ").strip().lower()
-        if not answer:
-            return False
-        if answer in {"y", "yes"}:
-            return True
-        if answer in {"n", "no"}:
-            return False
-        print("请输入 y 或 n")
+    """询问是否为详情页，在非交互式环境下返回默认值"""
+    try:
+        while True:
+            answer = input("该页面是否为详情页（需要更抽象的描述）？[y/N] ").strip().lower()
+            if not answer:
+                return False
+            if answer in {"y", "yes"}:
+                return True
+            if answer in {"n", "no"}:
+                return False
+            print("请输入 y 或 n")
+    except EOFError:
+        # 非交互式环境，返回默认值
+        return False
 
 
 def _abstract_detail_page_name(original: str, fallback: str | None = None) -> str:
@@ -502,6 +508,12 @@ def main(argv: Sequence[str] | None = None) -> int:  # pylint: disable=too-many-
             annotated_page.page_name = desired_name
 
     LOGGER.info("LLM 生成页面标定：id=%s, 别名数=%s", annotated_page.page_id, len(annotated_page.aliases))
+
+    # 位置感知后处理：基于测试用例中的位置要求生成精确别名
+    if args.test_cases:
+        annotated_page = _enhance_positional_aliases(annotated_page, args.test_cases)
+        LOGGER.info("位置感知增强：别名数=%s", len(annotated_page.aliases))
+
     if annotated_page.warnings:
         for warn in annotated_page.warnings:
             LOGGER.warning("LLM 警告: %s", warn)
@@ -568,6 +580,62 @@ def main(argv: Sequence[str] | None = None) -> int:  # pylint: disable=too-many-
         print("  本次未写入文件")
 
     return 0
+
+
+def _enhance_positional_aliases(page: AnnotatedPage, test_case_files: List[str]) -> AnnotatedPage:
+    """基于测试用例中的位置要求，增强别名生成精确的位置定位选择器"""
+    try:
+        # 收集所有测试用例中的位置要求
+        position_requirements = []
+
+        for test_file in test_case_files:
+            with open(test_file, 'r', encoding='utf-8') as f:
+                content = f.read()
+
+            # 提取位置信息，如"第1个"、"第5个"等
+            position_matches = re.findall(r'第(\d+)个', content)
+            for pos in position_matches:
+                position_requirements.append(int(pos))
+
+        if not position_requirements:
+            return page
+
+        # 为通用链接别名生成位置特定的别名
+        enhanced_aliases = {}
+
+        for alias_name, alias_def in dict(page.aliases).items():
+            # 检查是否为通用链接（可能包含多个相同元素）
+            if ('链接' in alias_def.description or 'link' in alias_def.description.lower()) and 'a' in alias_def.selector:
+                # 为测试用例中提到的每个位置生成精确别名
+                for position in sorted(set(position_requirements)):
+                    # 生成新的别名名
+                    new_alias_name = f"{alias_name}_第{position}个"
+                    # 生成位置选择器
+                    positional_selector = f"{alias_def.selector}:nth-child({position})"
+
+                    enhanced_aliases[new_alias_name] = AliasDefinition(
+                        name=new_alias_name,
+                        selector=positional_selector,
+                        description=f"{alias_def.description}（第{position}个，基于测试用例需求）",
+                        role=alias_def.role,
+                        confidence=alias_def.confidence * 0.9  # 略微降低置信度，因为这是推断的
+                    )
+
+        # 合并原有别名和新增的位置别名
+        if hasattr(page.aliases, 'update'):
+            page.aliases.update(enhanced_aliases)
+        else:
+            # 如果aliases是其他类型，转换为字典
+            current_aliases = dict(page.aliases)
+            current_aliases.update(enhanced_aliases)
+            page.aliases = current_aliases
+
+        LOGGER.info("基于测试用例位置要求新增了 %d 个精确别名", len(enhanced_aliases))
+        return page
+
+    except Exception as exc:
+        LOGGER.warning("位置感知增强失败: %s", exc)
+        return page
 
 
 if __name__ == "__main__":

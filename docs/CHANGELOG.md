@@ -15,6 +15,7 @@
 - 执行器新增 `count_equals/count_at_least` 断言支持，可直接验证元素数量
 - 编译器对 `count` 类断言不再附加 `:has-text` 过滤，避免生成依赖具体文案的数量校验 selector
 - 执行器在执行 `count` 断言前会等待目标元素渲染完成，提升异步页面下的稳定性
+- **标定工具DOM优化**：扩展DOM过滤范围，新增 iframe、embed、object、base、head 等标签过滤，进一步减少LLM处理噪音，提升标定效率和准确性
 
 ## 历史更新
 

@@ -64,8 +64,8 @@ def _extract_dom(page, *, max_depth: int, max_nodes: int) -> Tuple[Dict[str, obj
         const MAX_NODES = vars.maxNodes;
         let count = 0;
         const SKIP_TAGS = new Set([
-            'script', 'style', 'noscript', 'svg', 'path', 'defs', 'g', 'use',
-            'meta', 'link'
+            'script', 'style', 'noscript', 'iframe', 'embed', 'object', 'svg', 'path', 'defs', 'g', 'use',
+            'meta', 'link', 'base', 'head'
         ]);
 
         const computePath = (node) => {
@@ -104,6 +104,11 @@ def _extract_dom(page, *, max_depth: int, max_nodes: int) -> Tuple[Dict[str, obj
             if (el.getAttribute('aria-label')) attrs.ariaLabel = el.getAttribute('aria-label');
             if (el.getAttribute('role')) attrs.role = el.getAttribute('role');
             if (el.getAttribute('name')) attrs.nameAttr = el.getAttribute('name');
+            if (el.getAttribute('value')) attrs.value = el.getAttribute('value');
+            if (el.getAttribute('placeholder')) attrs.placeholder = el.getAttribute('placeholder');
+            if (el.getAttribute('type')) attrs.type = el.getAttribute('type');
+            // 过滤掉脚本相关属性，减少LLM噪音
+            // 注意：我们只收集有用的测试相关属性，不收集 onclick, onload 等脚本事件
             return attrs;
         };
 
