@@ -38,9 +38,21 @@ class Executor:
         self.logger.setLevel(logging.INFO)
         self.report_generator = TestReportGenerator() if self.settings.generate_report else None
 
-    def run(self, plan: ActionPlan) -> RunResult:
+    def run(self, plan: ActionPlan, artifacts_dir: Optional[Path] = None) -> RunResult:
+        """执行测试计划
+        
+        Args:
+            plan: 测试计划
+            artifacts_dir: 可选的结果目录，如果不提供则自动创建
+        
+        Returns:
+            测试执行结果
+        """
         run_id = self._build_run_id(plan.test_id)
+        if artifacts_dir is None:
         artifacts_dir = self._prepare_artifacts(run_id)
+        else:
+            artifacts_dir.mkdir(parents=True, exist_ok=True)
         log_handler = self._attach_run_logger(artifacts_dir / "runner.log")
         result = RunResult(
             run_id=run_id,
@@ -94,7 +106,7 @@ class Executor:
 
         return result
 
-    # pylint: disable=too-many-arguments,too-many-positional-arguments,too-many-locals
+    # pylint: disable=too-many-arguments,too-many-positional-arguments,too-many-locals,too-many-statements
     def _run_step(
         self,
         page,
@@ -124,6 +136,26 @@ class Executor:
             else:
                 raise ValueError(f"Unsupported step type: {step.t}")
         except Exception as exc:
+            # click操作失败时，允许重试1次
+            if step.t == "click":
+                self.logger.warning("Step %s failed: %s, 等待500ms后重试", index, self._format_error(exc))
+                try:
+                    page.wait_for_timeout(500)
+                    self._handle_click(page, step)
+                    self.logger.info("Step %s 重试成功", index)
+                    status = "passed"
+                except Exception as retry_exc:
+                    status = "failed"
+                    error_message = f"重试后仍失败: {self._format_error(retry_exc)}"
+                    self.logger.warning("Step %s 重试失败: %s", index, error_message)
+                    if self._should_capture(step_success=False):
+                        screenshot_path = str(screenshots_dir / f"{index:02d}.png")
+                        try:
+                            page.screenshot(path=screenshot_path, full_page=True)
+                        except Exception as screenshot_exc:  # pragma: no cover - best effort
+                            self.logger.error("Screenshot capture failed: %s", screenshot_exc)
+                            screenshot_path = None
+            else:
             status = "failed"
             error_message = self._format_error(exc)
             self.logger.warning("Step %s failed: %s", index, error_message)
@@ -188,6 +220,8 @@ class Executor:
         locator = page.locator(step.selector)
         timeout = self.settings.default_timeout_ms
         locator.first.click(timeout=timeout)
+        # 等待JavaScript事件处理完成
+        page.wait_for_timeout(200)
 
     # pylint: disable=too-many-branches
     def _handle_assert(self, page, step: ActionStep) -> None:
