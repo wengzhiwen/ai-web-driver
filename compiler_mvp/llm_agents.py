@@ -25,18 +25,25 @@ class DSLSpecification:
                       "3. 优先使用站点 Profile 中提供的别名 selector（aliases），如 search.input、detail.title 等。\n"
                       "4. 文本断言和点击需指向具体元素，必要时在 selector 末尾追加 :has-text('具体文本').\n"
                       "5. 断言步骤的文本与随后的点击需匹配同一条数据项。\n"
-                      "6. **操作类型匹配规则**：\n"
-                      "   - **fill 操作**：必须选择输入框类元素（input、textbox、search等），切勿选择按钮或链接\n"
-                      "   - **click 操作**：必须选择可交互元素（button、link、buy按钮等），切勿选择纯文本元素\n"
-                      "   - **assert 操作**：可选择显示元素（title、text、label等），用于验证内容\n"
-                      "7. **商品操作特别规则**：\n"
-                      "   - 验证商品名称时使用文本类选择器\n"
-                      "   - 点击商品时必须使用购买按钮或链接类选择器\n"
-                      "   - 切勿将商品名称文本作为点击目标\n"
-                      "8. **图片验证规则**：\n"
-                      "   - 验证图片显示时使用img选择器，但不要验证图片包含文本\n"
-                      "   - 图片验证应检查图片的visible状态，而非text内容\n"
-                      "   - 切勿使用img:has-text()这类无效的组合\n")
+                      "6. **根据 role 字段选择正确的元素（关键）**：\n"
+                      "   - 站点Profile中每个元素都标注了 role 字段（如：文本、按钮、链接、输入框等）\n"
+                      "   - **fill 操作**：必须选择 role=\"输入框\" 的元素，切勿选择按钮或链接\n"
+                      "   - **click 操作**：必须选择 role=\"按钮\" 或 role=\"链接\" 的元素，切勿选择 role=\"文本\" 的元素\n"
+                      "   - **assert 操作**：可选择 role=\"文本\"、role=\"标题\" 等显示元素，用于验证内容\n"
+                      "7. **常见错误模式及修正**：\n"
+                      "   - ✗ 错误：点击商品名称（role=\"文本\"） → 元素不可点击或点击无效\n"
+                      "   - ✓ 正确：点击购买按钮（role=\"按钮\"） → 成功进入详情页\n"
+                      "   - **识别方法**：在别名中查找包含 'button'、'btn'、'link' 关键字且 role 为按钮/链接的元素\n"
+                      "8. **图片验证规则（HTML标准）**：\n"
+                      "   - img 元素不包含文本内容，仅能验证其可见性\n"
+                      "   - ✗ 错误：img:has-text('xxx') - HTML标准中img元素不包含文本子节点\n"
+                      "   - ✓ 正确：img 配合 kind=\"visible\" - 验证图片元素存在且可见\n"
+                      "   - 图片验证步骤不应包含value字段，kind只能是 \"visible\"\n"
+                      "9. **标准测试流程示例**：\n"
+                      "   - 搜索商品：fill (role=\"输入框\") → click 搜索按钮(role=\"按钮\")\n"
+                      "   - 验证商品存在：assert 商品名称(role=\"文本\")，kind=\"text_contains\"\n"
+                      "   - 进入详情页：click 购买/详情按钮(role=\"按钮\")，而非点击商品名称\n"
+                      "   - 验证详情页：assert 商品标题(role=\"文本\") + assert 商品图片(role=\"图片\"，kind=\"visible\")\n")
 
         return ("你需要按照以下 JSON Schema 生成 ActionPlan DSL。\n"
                 "### JSON Schema\n"
@@ -55,8 +62,9 @@ class SiteProfileSummarizer:
     def summarize(profile: SiteProfile) -> str:
         grouped: Dict[str, List[str]] = {}
         for alias in profile.aliases.values():
-            grouped.setdefault(alias.page_id, []).append(f"- `{alias.name}` → `{alias.selector}` ({alias.description or '无描述'})")
-        lines = ["站点 Profile 摘要："]
+            role_info = f", role=\"{alias.role}\"" if hasattr(alias, 'role') and alias.role else ""
+            grouped.setdefault(alias.page_id, []).append(f"- `{alias.name}` → `{alias.selector}`{role_info} ({alias.description or '无描述'})")
+        lines = ["站点 Profile 摘要（请特别注意每个元素的 role 字段）："]
         for page_id, items in grouped.items():
             lines.append(f"页面 `{page_id}`:")
             lines.extend(items)
